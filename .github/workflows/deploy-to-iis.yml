@@ -32,29 +32,30 @@ jobs:
     needs: build
     runs-on: windows-latest
     steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: salesapp
-          path: PublishedApp
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: salesapp
+        path: PublishedApp
 
-      - name: Add Azure VM to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-        shell: bash
+    - name: Setup SSH known_hosts
+      run: |
+        mkdir -p /c/Users/runneradmin/.ssh
+        touch /c/Users/runneradmin/.ssh/known_hosts
+        ssh-keyscan -H 172.191.12.102 >> /c/Users/runneradmin/.ssh/known_hosts
+        chmod 600 /c/Users/runneradmin/.ssh/known_hosts
+      shell: bash
 
-      - name: Deploy to Azure VM via SCP
-        run: |
-          scp -o StrictHostKeyChecking=no -r PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
-        env:
-          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
-        shell: bash
+    - name: Deploy to Azure VM via SCP
+      run: |
+        scp -r PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
+      env:
+        SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+      shell: bash
 
-      - name: Restart IIS
-        run: |
-          ssh -o StrictHostKeyChecking=no adminuser@172.191.12.102 "iisreset"
-        env:
-          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
-        shell: bash
+    - name: Restart IIS
+      run: |
+        ssh adminuser@172.191.12.102 "iisreset"
+      env:
+        SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+      shell: bash
