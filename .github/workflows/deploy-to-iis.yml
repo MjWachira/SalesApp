@@ -38,12 +38,12 @@ jobs:
         name: salesapp
         path: PublishedApp
 
-    - name: Setup SSH known_hosts
+    - name: Ensure SSH directory exists
       run: |
-        mkdir -p /c/Users/runneradmin/.ssh
-        touch /c/Users/runneradmin/.ssh/known_hosts
-        ssh-keyscan -H 172.191.12.102 >> /c/Users/runneradmin/.ssh/known_hosts
-        chmod 600 /c/Users/runneradmin/.ssh/known_hosts
+        mkdir -p "$HOME/.ssh"
+        touch "$HOME/.ssh/known_hosts"
+        ssh-keyscan -H 172.191.12.102 >> "$HOME/.ssh/known_hosts"
+        chmod 600 "$HOME/.ssh/known_hosts"
       shell: bash
 
     - name: Deploy to Azure VM via SCP
