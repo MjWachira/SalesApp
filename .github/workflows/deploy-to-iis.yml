@@ -2,7 +2,7 @@ name: Deploy to Azure Windows VM
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build:
@@ -34,39 +34,39 @@ jobs:
           name: webapp
           path: published
 
-      - name: Configure WinRM
+      - name: Configure PowerShell Remoting
         run: |
-          # Enable PowerShell Remoting
-          $winrmPort = 5986
-          $vmIp = "172.191.12.102"
-          $credential = New-Object System.Management.Automation.PSCredential("adminuser", (ConvertTo-SecureString "${{ secrets.VM_PASSWORD }}" -AsPlainText -Force))
+          # Trust the target VM (temporarily)
+          Set-Item WSMan:\localhost\Client\TrustedHosts -Value "172.191.12.102" -Force
           
-          # Trust the target VM (for testing only - use proper cert validation in production)
-          Set-Item -Path WSMan:\localhost\Client\TrustedHosts -Value $vmIp -Force
-          
-          # Test connection
-          Test-WSMan -ComputerName $vmIp -Port $winrmPort -UseSSL -Credential $credential -Authentication Negotiate
-        shell: pwsh
+          # Test basic connectivity
+          Test-NetConnection -ComputerName 172.191.12.102 -Port 5985
+        shell: powershell
 
-      - name: Deploy via WinRM
+      - name: Deploy Application
         run: |
-          $session = New-PSSession -ComputerName 172.191.12.102 -Port 5986 -Credential $credential -UseSSL -SessionOption (New-PSSessionOption -SkipCACheck -SkipCNCheck)
+          $securePass = ConvertTo-SecureString "${{ secrets.VM_PASSWORD }}" -AsPlainText -Force
+          $cred = New-Object System.Management.Automation.PSCredential("adminuser", $securePass)
           
-          # Stop IIS if running
-          Invoke-Command -Session $session -ScriptBlock { 
-              Stop-Service W3SVC -ErrorAction SilentlyContinue
+          # Create remote session
+          $session = New-PSSession -ComputerName 172.191.12.102 -Credential $cred -Authentication Negotiate
+          
+          try {
+              # Stop IIS
+              Invoke-Command -Session $session -ScriptBlock {
+                  Stop-Service W3SVC -ErrorAction SilentlyContinue
+              }
+              
+              # Copy files
+              Copy-Item -Path "published\*" -Destination "C:\inetpub\salesapp\" -ToSession $session -Recurse -Force
+              
+              # Restart IIS
+              Invoke-Command -Session $session -ScriptBlock {
+                  Start-Service W3SVC
+                  iisreset
+              }
           }
-          
-          # Copy files
-          Copy-Item -Path "published\*" -Destination "C:\inetpub\salesapp\" -ToSession $session -Recurse -Force
-          
-          # Restart IIS
-          Invoke-Command -Session $session -ScriptBlock { 
-              Start-Service W3SVC
-              iisreset
+          finally {
+              if ($session) { Remove-PSSession $session }
           }
-          
-          Remove-PSSession $session
-        env:
-          VM_PASSWORD: ${{ secrets.VM_PASSWORD }}
-        shell: pwsh
+        shell: powershell
