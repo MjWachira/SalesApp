@@ -1,0 +1,53 @@
+name: Deploy to IIS on Azure VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore and Build
+        run: |
+          dotnet restore
+          dotnet publish -c Release -o PublishedApp
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: salesapp
+          path: PublishedApp
+
+  deploy:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: salesapp
+          path: PublishedApp
+
+      - name: Deploy to Azure VM via SCP
+        run: |
+          scp -r PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
+        env:
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+        shell: bash
+
+      - name: Restart IIS
+        run: |
+          ssh adminuser@172.191.12.102 "iisreset"
+        env:
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+        shell: bash
