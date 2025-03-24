@@ -40,7 +40,9 @@ jobs:
 
       - name: Add Azure VM to known_hosts
         run: |
+          mkdir -p ~/.ssh
           echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
         shell: bash
 
       - name: Deploy to Azure VM via SCP
