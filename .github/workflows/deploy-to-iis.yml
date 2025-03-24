@@ -23,32 +23,37 @@ jobs:
           dotnet publish -c Release -o PublishedApp
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4  # Upgrade from v3 to v4
+        uses: actions/upload-artifact@v3
         with:
           name: salesapp
           path: PublishedApp
-
 
   deploy:
     needs: build
     runs-on: windows-latest
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: salesapp
           path: PublishedApp
 
+      - name: Add Azure VM to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H 172.191.12.102 >> ~/.ssh/known_hosts
+        shell: bash
+
       - name: Deploy to Azure VM via SCP
         run: |
-          scp -r PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
+          scp -o StrictHostKeyChecking=no -r PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
         env:
           SSH_PASS: ${{ secrets.SSH_PASSWORD }}
         shell: bash
 
       - name: Restart IIS
         run: |
-          ssh adminuser@172.191.12.102 "iisreset"
+          ssh -o StrictHostKeyChecking=no adminuser@172.191.12.102 "iisreset"
         env:
           SSH_PASS: ${{ secrets.SSH_PASSWORD }}
         shell: bash
