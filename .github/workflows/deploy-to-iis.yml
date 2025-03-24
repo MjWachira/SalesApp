@@ -9,13 +9,20 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
-      - run: dotnet publish -c Release -o published
+          
+      - name: Build and Publish
+        run: |
+          dotnet restore
+          dotnet publish -c Release -o published -r win-x64 --self-contained false
+
       - uses: actions/upload-artifact@v4
         with:
-          name: app
+          name: webapp
           path: published
 
   deploy:
@@ -24,44 +31,76 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: app
+          name: webapp
           path: published
 
-      - name: Deploy via PowerShell Remoting
+      - name: Verify Secrets Exist
         run: |
-          $securePass = ConvertTo-SecureString "${{ secrets.VM_PASSWORD }}" -AsPlainText -Force
-          $cred = New-Object System.Management.Automation.PSCredential("adminuser", $securePass)
-          
-          # Create session with retry logic
-          $maxRetries = 3
-          $retryCount = 0
-          $session = $null
-          
-          while ($retryCount -lt $maxRetries -and $session -eq $null) {
-              try {
-                  $session = New-PSSession -ComputerName 172.191.12.102 -Credential $cred -ErrorAction Stop
-              }
-              catch {
-                  $retryCount++
-                  if ($retryCount -eq $maxRetries) { throw }
-                  Start-Sleep -Seconds 5
-              }
+          if (-not "${{ secrets.SSH_PASSWORD }}") {
+              throw "VM_PASSWORD secret is not set!"
           }
+        shell: powershell
+
+      - name: Configure PowerShell Remoting
+        run: |
+          # Trust the target VM
+          Set-Item WSMan:\localhost\Client\TrustedHosts -Value "172.191.12.102" -Force
           
+          # Verify connectivity
+          $ping = Test-NetConnection -ComputerName 172.191.12.102 -Port 5985 -WarningAction SilentlyContinue
+          if (-not $ping.TcpTestSucceeded) {
+              throw "Cannot connect to VM on port 5985. Verify WinRM is enabled and firewall rules are correct."
+          }
+        shell: powershell
+
+      - name: Deploy Application
+        run: |
           try {
-              # Stop IIS, deploy files, restart IIS
+              # Create secure password (explicit error if empty)
+              if ([string]::IsNullOrEmpty("${{ secrets.SSH_PASSWORD }}")) {
+                  throw "VM_PASSWORD secret is empty!"
+              }
+              
+              $securePass = ConvertTo-SecureString "${{ secrets.SSH_PASSWORD }}" -AsPlainText -Force
+              $cred = New-Object System.Management.Automation.PSCredential("adminuser", $securePass)
+              
+              # Session parameters
+              $sessionParams = @{
+                  ComputerName = "172.191.12.102"
+                  Credential = $cred
+                  SessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck
+                  ErrorAction = 'Stop'
+              }
+              
+              Write-Output "Creating remote session..."
+              $session = New-PSSession @sessionParams
+              
+              # Deployment steps
+              Write-Output "Stopping IIS..."
               Invoke-Command -Session $session -ScriptBlock {
                   Stop-Service W3SVC -ErrorAction SilentlyContinue
               }
               
+              Write-Output "Copying files..."
               Copy-Item -Path "published\*" -Destination "C:\inetpub\salesapp\" -ToSession $session -Recurse -Force
               
+              Write-Output "Restarting IIS..."
               Invoke-Command -Session $session -ScriptBlock {
                   Start-Service W3SVC
                   iisreset
               }
+              
+              Write-Output "Deployment completed successfully!"
+          }
+          catch {
+              Write-Error "DEPLOYMENT FAILED: $_"
+              exit 1
           }
           finally {
-              if ($session) { Remove-PSSession $session }
+              if ($null -ne $session) { 
+                  Remove-PSSession $session -ErrorAction SilentlyContinue 
+              }
           }
         shell: powershell
+        env:
+          VM_PASSWORD: ${{ secrets.SSH_PASSWORD }}
