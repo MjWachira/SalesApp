@@ -9,20 +9,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
-          
-      - name: Build and Publish
-        run: |
-          dotnet restore
-          dotnet publish -c Release -o published -r win-x64 --self-contained false
-
+      - run: dotnet publish -c Release -o published
       - uses: actions/upload-artifact@v4
         with:
-          name: webapp
+          name: app
           path: published
 
   deploy:
@@ -31,36 +24,38 @@ jobs:
     steps:
       - uses: actions/download-artifact@v3
         with:
-          name: webapp
+          name: app
           path: published
 
-      - name: Configure PowerShell Remoting
-        run: |
-          # Trust the target VM (temporarily)
-          Set-Item WSMan:\localhost\Client\TrustedHosts -Value "172.191.12.102" -Force
-          
-          # Test basic connectivity
-          Test-NetConnection -ComputerName 172.191.12.102 -Port 5985
-        shell: powershell
-
-      - name: Deploy Application
+      - name: Deploy via PowerShell Remoting
         run: |
           $securePass = ConvertTo-SecureString "${{ secrets.VM_PASSWORD }}" -AsPlainText -Force
           $cred = New-Object System.Management.Automation.PSCredential("adminuser", $securePass)
           
-          # Create remote session
-          $session = New-PSSession -ComputerName 172.191.12.102 -Credential $cred -Authentication Negotiate
+          # Create session with retry logic
+          $maxRetries = 3
+          $retryCount = 0
+          $session = $null
+          
+          while ($retryCount -lt $maxRetries -and $session -eq $null) {
+              try {
+                  $session = New-PSSession -ComputerName 172.191.12.102 -Credential $cred -ErrorAction Stop
+              }
+              catch {
+                  $retryCount++
+                  if ($retryCount -eq $maxRetries) { throw }
+                  Start-Sleep -Seconds 5
+              }
+          }
           
           try {
-              # Stop IIS
+              # Stop IIS, deploy files, restart IIS
               Invoke-Command -Session $session -ScriptBlock {
                   Stop-Service W3SVC -ErrorAction SilentlyContinue
               }
               
-              # Copy files
               Copy-Item -Path "published\*" -Destination "C:\inetpub\salesapp\" -ToSession $session -Recurse -Force
               
-              # Restart IIS
               Invoke-Command -Session $session -ScriptBlock {
                   Start-Service W3SVC
                   iisreset
