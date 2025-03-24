@@ -40,8 +40,7 @@ jobs:
 
       - name: Add Azure VM to known_hosts
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H 172.191.12.102 >> ~/.ssh/known_hosts
+          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
         shell: bash
 
       - name: Deploy to Azure VM via SCP
