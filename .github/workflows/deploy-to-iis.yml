@@ -38,28 +38,37 @@ jobs:
           name: salesapp
           path: PublishedApp
   
-      - name: Ensure SSH Directory Exists (Windows)
+      - name: Setup SSH directory and known_hosts
         run: |
-          mkdir "%USERPROFILE%\.ssh" 2> nul || true
-          echo "" > "%USERPROFILE%\.ssh\known_hosts"
-          icacls "%USERPROFILE%\.ssh\known_hosts" /inheritance:r /grant:r "%USERNAME%":R
-        shell: cmd
+          $sshPath = "$env:USERPROFILE\.ssh"
+          if (!(Test-Path $sshPath)) { New-Item -ItemType Directory -Path $sshPath }
+          if (!(Test-Path "$sshPath\known_hosts")) { New-Item -ItemType File -Path "$sshPath\known_hosts" }
+          # Set strict permissions
+          icacls $sshPath /inheritance:r /grant:r "$env:USERNAME":F
+          icacls "$sshPath\known_hosts" /inheritance:r /grant:r "$env:USERNAME":F
+        shell: pwsh
   
       - name: Add Azure VM to known_hosts
         run: |
-          ssh-keyscan -H 172.191.12.102 >> "%USERPROFILE%\.ssh\known_hosts"
+          ssh-keyscan -H 172.191.12.102 >> "$env:USERPROFILE\.ssh\known_hosts"
         shell: bash
+  
+      - name: Install Win32-OpenSSH (if needed)
+        run: |
+          Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+        shell: pwsh
   
       - name: Deploy to Azure VM via SCP
         run: |
-          scp -r -o StrictHostKeyChecking=no PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
+          $env:SSH_AUTH_SOCK = "nul"
+          scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile="$env:USERPROFILE\.ssh\known_hosts" PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
         env:
           SSH_PASS: ${{ secrets.SSH_PASSWORD }}
-        shell: bash
+        shell: pwsh
   
       - name: Restart IIS
         run: |
-          ssh -o StrictHostKeyChecking=no adminuser@172.191.12.102 "iisreset"
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile="$env:USERPROFILE\.ssh\known_hosts" adminuser@172.191.12.102 "iisreset"
         env:
           SSH_PASS: ${{ secrets.SSH_PASSWORD }}
-        shell: bash
+        shell: pwsh
