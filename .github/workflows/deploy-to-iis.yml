@@ -1,74 +1,72 @@
-name: Deploy to IIS on Azure VM
+name: Deploy to Azure Windows VM
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
-
-      - name: Restore and Build
+          
+      - name: Build and Publish
         run: |
           dotnet restore
-          dotnet publish -c Release -o PublishedApp
+          dotnet publish -c Release -o published -r win-x64 --self-contained false
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: salesapp
-          path: PublishedApp
+          name: webapp
+          path: published
 
   deploy:
     needs: build
     runs-on: windows-latest
     steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v3
         with:
-          name: salesapp
-          path: PublishedApp
-  
-      - name: Setup SSH directory and known_hosts
+          name: webapp
+          path: published
+
+      - name: Configure WinRM
         run: |
-          $sshPath = "$env:USERPROFILE\.ssh"
-          if (!(Test-Path $sshPath)) { New-Item -ItemType Directory -Path $sshPath }
-          if (!(Test-Path "$sshPath\known_hosts")) { New-Item -ItemType File -Path "$sshPath\known_hosts" }
-          # Set strict permissions
-          icacls $sshPath /inheritance:r /grant:r "$env:USERNAME":F
-          icacls "$sshPath\known_hosts" /inheritance:r /grant:r "$env:USERNAME":F
+          # Enable PowerShell Remoting
+          $winrmPort = 5986
+          $vmIp = "172.191.12.102"
+          $credential = New-Object System.Management.Automation.PSCredential("adminuser", (ConvertTo-SecureString "${{ secrets.VM_PASSWORD }}" -AsPlainText -Force))
+          
+          # Trust the target VM (for testing only - use proper cert validation in production)
+          Set-Item -Path WSMan:\localhost\Client\TrustedHosts -Value $vmIp -Force
+          
+          # Test connection
+          Test-WSMan -ComputerName $vmIp -Port $winrmPort -UseSSL -Credential $credential -Authentication Negotiate
         shell: pwsh
-  
-      - name: Add Azure VM to known_hosts
+
+      - name: Deploy via WinRM
         run: |
-          ssh-keyscan -H 172.191.12.102 >> "$env:USERPROFILE\.ssh\known_hosts"
-        shell: bash
-  
-      - name: Install Win32-OpenSSH (if needed)
-        run: |
-          Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
-        shell: pwsh
-  
-      - name: Deploy to Azure VM via SCP
-        run: |
-          $env:SSH_AUTH_SOCK = "nul"
-          scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile="$env:USERPROFILE\.ssh\known_hosts" PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
+          $session = New-PSSession -ComputerName 172.191.12.102 -Port 5986 -Credential $credential -UseSSL -SessionOption (New-PSSessionOption -SkipCACheck -SkipCNCheck)
+          
+          # Stop IIS if running
+          Invoke-Command -Session $session -ScriptBlock { 
+              Stop-Service W3SVC -ErrorAction SilentlyContinue
+          }
+          
+          # Copy files
+          Copy-Item -Path "published\*" -Destination "C:\inetpub\salesapp\" -ToSession $session -Recurse -Force
+          
+          # Restart IIS
+          Invoke-Command -Session $session -ScriptBlock { 
+              Start-Service W3SVC
+              iisreset
+          }
+          
+          Remove-PSSession $session
         env:
-          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
-        shell: pwsh
-  
-      - name: Restart IIS
-        run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile="$env:USERPROFILE\.ssh\known_hosts" adminuser@172.191.12.102 "iisreset"
-        env:
-          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+          VM_PASSWORD: ${{ secrets.VM_PASSWORD }}
         shell: pwsh
