@@ -9,17 +9,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
-          
-      - name: Build and Publish
-        run: |
-          dotnet restore
-          dotnet publish -c Release -o published -r win-x64 --self-contained false
-
+      - run: dotnet publish -c Release -o published
       - uses: actions/upload-artifact@v4
         with:
           name: webapp
@@ -34,72 +27,68 @@ jobs:
           name: webapp
           path: published
 
-      - name: Verify Secrets Exist
-        run: |
-          if (-not "${{ secrets.SSH_PASSWORD }}") {
-              throw "VM_PASSWORD secret is not set!"
-          }
-        shell: powershell
-
-      - name: Configure PowerShell Remoting
-        run: |
-          # Trust the target VM
-          Set-Item WSMan:\localhost\Client\TrustedHosts -Value "172.191.12.102" -Force
-          
-          # Verify connectivity
-          $ping = Test-NetConnection -ComputerName 172.191.12.102 -Port 5985 -WarningAction SilentlyContinue
-          if (-not $ping.TcpTestSucceeded) {
-              throw "Cannot connect to VM on port 5985. Verify WinRM is enabled and firewall rules are correct."
-          }
-        shell: powershell
-
-      - name: Deploy Application
+      - name: Deploy via PowerShell Remoting
         run: |
           try {
-              # Create secure password (explicit error if empty)
-              if ([string]::IsNullOrEmpty("${{ secrets.SSH_PASSWORD }}")) {
-                  throw "VM_PASSWORD secret is empty!"
-              }
-              
+              # Create credentials
               $securePass = ConvertTo-SecureString "${{ secrets.SSH_PASSWORD }}" -AsPlainText -Force
               $cred = New-Object System.Management.Automation.PSCredential("adminuser", $securePass)
-              
-              # Session parameters
+
+              # Session parameters with 2 minute timeout
               $sessionParams = @{
                   ComputerName = "172.191.12.102"
                   Credential = $cred
-                  SessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck
+                  SessionOption = New-PSSessionOption -OperationTimeout (120 * 1000) -SkipCACheck -SkipCNCheck
                   ErrorAction = 'Stop'
               }
-              
-              Write-Output "Creating remote session..."
-              $session = New-PSSession @sessionParams
-              
-              # Deployment steps
-              Write-Output "Stopping IIS..."
-              Invoke-Command -Session $session -ScriptBlock {
-                  Stop-Service W3SVC -ErrorAction SilentlyContinue
+
+              # Deployment with retry logic
+              $maxRetries = 3
+              $retryCount = 0
+              $success = $false
+
+              while (-not $success -and $retryCount -lt $maxRetries) {
+                  try {
+                      Write-Output "Attempt $($retryCount + 1) of $maxRetries"
+                      $session = New-PSSession @sessionParams
+
+                      # Stop IIS
+                      Invoke-Command -Session $session -ScriptBlock {
+                          Stop-Service W3SVC -ErrorAction SilentlyContinue
+                      }
+
+                      # Deploy files
+                      Copy-Item -Path "published\*" -Destination "C:\inetpub\salesapp\" -ToSession $session -Recurse -Force
+
+                      # Restart IIS
+                      Invoke-Command -Session $session -ScriptBlock {
+                          Start-Service W3SVC
+                          iisreset
+                      }
+
+                      $success = $true
+                      Write-Output "Deployment completed successfully!"
+                  }
+                  catch {
+                      $retryCount++
+                      if ($retryCount -ge $maxRetries) {
+                          throw "Final attempt failed: $_"
+                      }
+                      Write-Output "Attempt failed, retrying in 10 seconds... Error: $_"
+                      Start-Sleep -Seconds 10
+                  }
+                  finally {
+                      if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
+                  }
               }
-              
-              Write-Output "Copying files..."
-              Copy-Item -Path "published\*" -Destination "C:\inetpub\salesapp\" -ToSession $session -Recurse -Force
-              
-              Write-Output "Restarting IIS..."
-              Invoke-Command -Session $session -ScriptBlock {
-                  Start-Service W3SVC
-                  iisreset
+
+              if (-not $success) {
+                  exit 1
               }
-              
-              Write-Output "Deployment completed successfully!"
           }
           catch {
               Write-Error "DEPLOYMENT FAILED: $_"
               exit 1
-          }
-          finally {
-              if ($null -ne $session) { 
-                  Remove-PSSession $session -ErrorAction SilentlyContinue 
-              }
           }
         shell: powershell
         env:
