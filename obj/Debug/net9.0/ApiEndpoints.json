@@ -1,0 +1,12 @@
+[
+  {
+    "ContainingType": "CustomersController",
+    "Method": "GetCustomers",
+    "RelativePath": "api/customers",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  }
+]

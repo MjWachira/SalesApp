@@ -1,0 +1,20 @@
+{
+  "Version": 1,
+  "Hash": "GB6eQ8MBvpaKcGUeUyO6ZSZ9yNVxJM8vaTnoq13D0Kg=",
+  "Source": "SalesApp",
+  "BasePath": "_content/SalesApp",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [
+    {
+      "Name": "SalesApp\\wwwroot",
+      "Source": "SalesApp",
+      "ContentRoot": "C:\\Development\\SalesApp\\wwwroot\\",
+      "BasePath": "_content/SalesApp",
+      "Pattern": "**"
+    }
+  ],
+  "Assets": [],
+  "Endpoints": []
+}
