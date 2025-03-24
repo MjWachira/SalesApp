@@ -1,95 +1,53 @@
-name: Deploy to Azure Windows VM
+name: Deploy to IIS on Azure VM
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
-      - run: dotnet publish -c Release -o published
-      - uses: actions/upload-artifact@v4
+
+      - name: Restore and Build
+        run: |
+          dotnet restore
+          dotnet publish -c Release -o PublishedApp
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: webapp
-          path: published
+          name: salesapp
+          path: PublishedApp
 
   deploy:
     needs: build
     runs-on: windows-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download artifact
+        uses: actions/download-artifact@v4
         with:
-          name: webapp
-          path: published
+          name: salesapp
+          path: PublishedApp
 
-      - name: Deploy via PowerShell Remoting
+      - name: Deploy to Azure VM via SCP
         run: |
-          try {
-              # Create credentials
-              $securePass = ConvertTo-SecureString "${{ secrets.SSH_PASSWORD }}" -AsPlainText -Force
-              $cred = New-Object System.Management.Automation.PSCredential("adminuser", $securePass)
-
-              # Session parameters with 2 minute timeout
-              $sessionParams = @{
-                  ComputerName = "172.191.12.102"
-                  Credential = $cred
-                  SessionOption = New-PSSessionOption -OperationTimeout (120 * 1000) -SkipCACheck -SkipCNCheck
-                  ErrorAction = 'Stop'
-              }
-
-              # Deployment with retry logic
-              $maxRetries = 3
-              $retryCount = 0
-              $success = $false
-
-              while (-not $success -and $retryCount -lt $maxRetries) {
-                  try {
-                      Write-Output "Attempt $($retryCount + 1) of $maxRetries"
-                      $session = New-PSSession @sessionParams
-
-                      # Stop IIS
-                      Invoke-Command -Session $session -ScriptBlock {
-                          Stop-Service W3SVC -ErrorAction SilentlyContinue
-                      }
-
-                      # Deploy files
-                      Copy-Item -Path "published\*" -Destination "C:\inetpub\salesapp\" -ToSession $session -Recurse -Force
-
-                      # Restart IIS
-                      Invoke-Command -Session $session -ScriptBlock {
-                          Start-Service W3SVC
-                          iisreset
-                      }
-
-                      $success = $true
-                      Write-Output "Deployment completed successfully!"
-                  }
-                  catch {
-                      $retryCount++
-                      if ($retryCount -ge $maxRetries) {
-                          throw "Final attempt failed: $_"
-                      }
-                      Write-Output "Attempt failed, retrying in 10 seconds... Error: $_"
-                      Start-Sleep -Seconds 10
-                  }
-                  finally {
-                      if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
-                  }
-              }
-
-              if (-not $success) {
-                  exit 1
-              }
-          }
-          catch {
-              Write-Error "DEPLOYMENT FAILED: $_"
-              exit 1
-          }
-        shell: powershell
+          scp -r PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
         env:
-          VM_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+        shell: bash
+
+      - name: Restart IIS
+        run: |
+          ssh adminuser@172.191.12.102 "iisreset"
+        env:
+          SSH_PASS: ${{ secrets.SSH_PASSWORD }}
+        shell: bash
