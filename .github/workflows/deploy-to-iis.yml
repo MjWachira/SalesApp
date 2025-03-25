@@ -21,7 +21,6 @@ jobs:
         run: |
           dotnet restore
           dotnet publish -c Release -o PublishedApp
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -38,7 +37,7 @@ jobs:
           name: salesapp
           path: PublishedApp
 
-      - name: Install SSH key
+      - name: Install SSH key and configure
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -49,24 +48,20 @@ jobs:
               User vmadmin
               IdentityFile ~/.ssh/id_rsa
               StrictHostKeyChecking no
+      - name: Verify SSH connection
+        run: ssh azure-vm "echo SSH connection verified!"
 
-      - name: Prepare target directory
+      - name: Create target directory structure
         run: |
-          ssh azure-vm "powershell -Command \"
-            if (!(Test-Path C:\\inetpub\\wwwroot\\SalesApp)) {
-              New-Item -Path C:\\inetpub\\wwwroot\\SalesApp -ItemType Directory
-            }
-            Get-ChildItem C:\\inetpub\\wwwroot\\SalesApp | Remove-Item -Recurse -Force
-          \""
+          ssh azure-vm "
+          if not exist C:\inetpub\salesapp mkdir C:\inetpub\salesapp
+          if not exist C:\inetpub\salesapp\wwwroot mkdir C:\inetpub\salesapp\wwwroot
+          "
+      - name: Deploy files to wwwroot
+        run: scp -r PublishedApp/* azure-vm:"C:/inetpub/salesapp/wwwroot/"
 
-      - name: Deploy files
-        run: scp -rp PublishedApp/* azure-vm:"C:/inetpub/wwwroot/SalesApp/"
-
-      - name: Set permissions
-        run: ssh azure-vm "powershell icacls C:\\inetpub\\wwwroot\\SalesApp /grant IIS_IUSRS:(OI)(CI)F /grant 'vmadmin:(OI)(CI)F'"
-
-      - name: Verify deployment
-        run: ssh azure-vm "powershell Get-ChildItem C:\\inetpub\\wwwroot\\SalesApp"
+      - name: Set proper permissions
+        run: ssh azure-vm "icacls C:\inetpub\salesapp\wwwroot /grant IIS_IUSRS:(OI)(CI)F"
 
       - name: Restart IIS
         run: ssh azure-vm "iisreset"
