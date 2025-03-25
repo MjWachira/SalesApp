@@ -48,26 +48,28 @@ jobs:
           # Create .ssh directory
           mkdir -p $env:USERPROFILE\.ssh
           
-          # Save private key with proper permissions
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > $env:USERPROFILE\.ssh\id_rsa
+          # Validate private key format
+          if (-not (Test-Path env:SSH_PRIVATE_KEY)) {
+            Write-Error "SSH_PRIVATE_KEY secret is missing"
+            exit 1
+          }
+          
+          # Save private key with proper newlines
+          $keyContent = @"
+          ${{ secrets.SSH_PRIVATE_KEY }}
+          "@
+          $keyContent -replace "`r`n?|`n", "`n" | Out-File -FilePath $env:USERPROFILE\.ssh\id_rsa -Encoding ascii
+          
+          # Set strict permissions
           icacls $env:USERPROFILE\.ssh\id_rsa /inheritance:r /grant:r "$env:USERNAME:F"
           
-          # Add known_hosts entry (from ssh-keyscan)
+          # Add known_hosts entry
           echo "20.81.164.12 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP++GxNJb0SrrKhRL0CLJk/UrJ7NWL0Ih9FtM5nHgzbf" > $env:USERPROFILE\.ssh\known_hosts
           
-          # Verify setup
-          ls $env:USERPROFILE\.ssh
-          type $env:USERPROFILE\.ssh\id_rsa
+          # Verify key format
+          ssh-keygen -lf $env:USERPROFILE\.ssh\id_rsa
         shell: pwsh
 
-      - name: Verify SSH Connection
+      - name: Test SSH Connection
         run: |
-          ssh -T -v -i $env:USERPROFILE\.ssh\id_rsa -o StrictHostKeyChecking=no ${{ env.VM_USER }}@${{ env.VM_IP }} "echo 'SSH connection verified!'"
-
-      - name: Deploy Application Files
-        run: |
-          scp -r -v -i $env:USERPROFILE\.ssh\id_rsa -o StrictHostKeyChecking=no PublishedApp/* ${{ env.VM_USER }}@${{ env.VM_IP }}:"${{ env.DEPLOY_PATH }}"
-
-      - name: Restart IIS
-        run: |
-          ssh -v -i $env:USERPROFILE\.ssh\id_rsa -o StrictHostKeyChecking=no ${{ env.VM_USER }}@${{ env.VM_IP }} "iisreset"
+          ssh -T -v -i $env:USERPROFILE\.ssh\id_rsa -o StrictHostKeyChecking=no ${{ env.VM_USER }}@${{ env.VM_IP }} "echo 'SSH connection successful!'"
