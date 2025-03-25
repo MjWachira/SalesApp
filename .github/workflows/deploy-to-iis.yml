@@ -38,7 +38,7 @@ jobs:
           name: salesapp
           path: PublishedApp
 
-      - name: Install SSH key and test connection
+      - name: Install SSH key and configure
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -50,17 +50,21 @@ jobs:
               IdentityFile ~/.ssh/id_rsa
               StrictHostKeyChecking no
 
-      - name: Test SSH connection
-        run: ssh azure-vm "echo SSH connection successful!"
+      - name: Verify SSH connection
+        run: ssh azure-vm "echo SSH connection verified!"
 
-      - name: Create remote directory (Windows compatible)
-        run: ssh azure-vm "if not exist C:\inetpub\salesapp mkdir C:\inetpub\salesapp\wwwroot"
+      - name: Create target directory structure
+        run: |
+          ssh azure-vm "
+          if not exist C:\inetpub\salesapp mkdir C:\inetpub\salesapp
+          if not exist C:\inetpub\salesapp\wwwroot mkdir C:\inetpub\salesapp\wwwroot
+          "
 
-      - name: Deploy to Azure VM via SCP (Windows paths)
-        run: scp -r PublishedApp/* azure-vm:"C:/inetpub/salesapp/wwwwroot/"
+      - name: Deploy files to wwwroot
+        run: scp -r PublishedApp/* azure-vm:"C:/inetpub/salesapp/wwwroot/"
 
-      - name: Verify deployment
-        run: ssh azure-vm "dir C:\inetpub\salesapp\wwwroot"
+      - name: Set proper permissions
+        run: ssh azure-vm "icacls C:\inetpub\salesapp\wwwroot /grant IIS_IUSRS:(OI)(CI)F"
 
       - name: Restart IIS
         run: ssh azure-vm "iisreset"
