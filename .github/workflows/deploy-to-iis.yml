@@ -46,7 +46,7 @@ jobs:
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+          known_hosts: ${{ secrets.KNOWN_HOSTS }}
           config: |
             Host azure-vm
               HostName 20.81.164.12
