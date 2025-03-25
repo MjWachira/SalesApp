@@ -54,13 +54,13 @@ jobs:
         run: ssh azure-vm "echo SSH connection successful!"
 
       - name: Create remote directory (Windows compatible)
-        run: ssh azure-vm "if not exist C:\inetpub\salesapp mkdir C:\inetpub\salesapp"
+        run: ssh azure-vm "if not exist C:\inetpub\salesapp mkdir C:\inetpub\salesapp\wwwroot"
 
       - name: Deploy to Azure VM via SCP (Windows paths)
-        run: scp -r PublishedApp/* azure-vm:"C:/inetpub/salesapp/"
+        run: scp -r PublishedApp/* azure-vm:"C:/inetpub/salesapp/wwwwroot/"
 
       - name: Verify deployment
-        run: ssh azure-vm "dir C:\inetpub\salesapp"
+        run: ssh azure-vm "dir C:\inetpub\salesapp\wwwroot"
 
       - name: Restart IIS
         run: ssh azure-vm "iisreset"
