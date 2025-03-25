@@ -46,8 +46,8 @@ jobs:
 
       - name: Deploy to Azure VM via SCP
         run: |
-          scp -r -o StrictHostKeyChecking=no PublishedApp/* adminuser@172.191.12.102:C:/inetpub/salesapp
+          scp -r -o StrictHostKeyChecking=no PublishedApp/* vmadmin@20.81.164.12:C:/inetpub/salesapp
 
       - name: Restart IIS
         run: |
-          ssh -o StrictHostKeyChecking=no adminuser@172.191.12.102 "iisreset"
+          ssh -o StrictHostKeyChecking=no vmadmin@20.81.164.12 "iisreset"
