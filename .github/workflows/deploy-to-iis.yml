@@ -21,6 +21,7 @@ jobs:
         run: |
           dotnet restore
           dotnet publish -c Release -o PublishedApp
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -48,20 +49,22 @@ jobs:
               User vmadmin
               IdentityFile ~/.ssh/id_rsa
               StrictHostKeyChecking no
+              
       - name: Verify SSH connection
         run: ssh azure-vm "echo SSH connection verified!"
 
       - name: Create target directory structure
         run: |
           ssh azure-vm "
-          if not exist C:\inetpub\salesapp mkdir C:\inetpub\salesapp
-          if not exist C:\inetpub\salesapp\wwwroot mkdir C:\inetpub\salesapp\wwwroot
+          if not exist C:\\inetpub\\wwwroot\\SalesApp mkdir C:\\inetpub\\wwwroot\\SalesApp
+          if not exist C:\\inetpub\\wwwroot\\SalesApp\\wwwroot mkdir C:\\inetpub\\wwwroot\\SalesApp\\wwwroot
           "
+          
       - name: Deploy files to wwwroot
-        run: scp -r PublishedApp/* azure-vm:"C:/inetpub/salesapp/wwwroot/"
+        run: scp -r PublishedApp/* azure-vm:"C:/inetpub/wwwroot/SalesApp/"
 
       - name: Set proper permissions
-        run: ssh azure-vm "icacls C:\inetpub\salesapp\wwwroot /grant IIS_IUSRS:(OI)(CI)F"
+        run: ssh azure-vm "icacls C:\\inetpub\\wwwroot\\SalesApp /grant IIS_IUSRS:(OI)(CI)F"
 
       - name: Restart IIS
         run: ssh azure-vm "iisreset"
