@@ -10,7 +10,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4  # Updated to v4
+        uses: actions/checkout@v4
 
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
@@ -38,16 +38,33 @@ jobs:
           name: salesapp
           path: PublishedApp
 
-      - name: Install SSH key
-        uses: shimataro/ssh-key-action@v2  # Note: Latest is v2, not v4
+      - name: List downloaded files (debug)
+        run: dir PublishedApp /s
+        shell: cmd
+
+      - name: Install SSH key and test connection
+        uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+          config: |
+            Host azure-vm
+              HostName 20.81.164.12
+              User vmadmin
+              IdentityFile ~/.ssh/id_rsa
+              StrictHostKeyChecking no
+
+      - name: Test SSH connection
+        run: ssh azure-vm "echo 'SSH connection successful!'"
+
+      - name: Create remote directory (if needed)
+        run: ssh azure-vm "mkdir -p C:/inetpub/salesapp"
 
       - name: Deploy to Azure VM via SCP
-        run: |
-          scp -r -o StrictHostKeyChecking=no PublishedApp/* vmadmin@20.81.164.12:C:/inetpub/salesapp
+        run: scp -v -r PublishedApp/* azure-vm:C:/inetpub/salesapp
+
+      - name: Verify deployment
+        run: ssh azure-vm "dir C:/inetpub/salesapp"
 
       - name: Restart IIS
-        run: |
-          ssh -o StrictHostKeyChecking=no vmadmin@20.81.164.12 "iisreset"
+        run: ssh azure-vm "iisreset"
