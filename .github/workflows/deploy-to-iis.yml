@@ -50,13 +50,17 @@ jobs:
 
       - name: Add host to known hosts
         run: |
-          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> $env:USERPROFILE\.ssh\known_hosts
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > $env:USERPROFILE\.ssh\known_hosts
           type $env:USERPROFILE\.ssh\known_hosts
+
+      - name: Test SSH connection
+        run: |
+          ssh -T -v ${{ env.VM_USER }}@${{ env.VM_IP }} "echo 'SSH connection successful!'"
 
       - name: Deploy files via SCP
         run: |
-          scp -r -v -o ConnectTimeout=30 PublishedApp/* ${{ env.VM_USER }}@${{ env.VM_IP }}:${{ env.DEPLOY_PATH }}
+          scp -r -v -o ConnectTimeout=30 -o StrictHostKeyChecking=no PublishedApp/* ${{ env.VM_USER }}@${{ env.VM_IP }}:${{ env.DEPLOY_PATH }}
 
       - name: Restart IIS
         run: |
-          ssh -v -o ConnectTimeout=30 ${{ env.VM_USER }}@${{ env.VM_IP }} "iisreset"
+          ssh -v -o StrictHostKeyChecking=no ${{ env.VM_USER }}@${{ env.VM_IP }} "iisreset"
