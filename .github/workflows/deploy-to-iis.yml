@@ -10,7 +10,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@vv
+        uses: actions/checkout@v4  # Updated to v4
 
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
@@ -39,7 +39,7 @@ jobs:
           path: PublishedApp
 
       - name: Install SSH key
-        uses: shimataro/ssh-key-action@v4
+        uses: shimataro/ssh-key-action@v2  # Note: Latest is v2, not v4
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
