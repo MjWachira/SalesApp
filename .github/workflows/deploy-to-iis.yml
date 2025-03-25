@@ -5,6 +5,11 @@ on:
     branches:
       - main
 
+env:
+  VM_IP: 20.81.164.12
+  VM_USER: vmadmin
+  DEPLOY_PATH: C:/inetpub/salesapp
+
 jobs:
   build:
     runs-on: windows-latest
@@ -38,16 +43,20 @@ jobs:
           name: salesapp
           path: PublishedApp
 
-      - name: Install SSH Key
-        uses: shimataro/ssh-key-action@v2
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.7.0
         with:
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Deploy to Azure VM via SCP
+      - name: Add host to known hosts
         run: |
-          scp -r -o StrictHostKeyChecking=no PublishedApp/* vmadmin@20.81.164.12:C:/inetpub/salesapp
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> $env:USERPROFILE\.ssh\known_hosts
+          type $env:USERPROFILE\.ssh\known_hosts
+
+      - name: Deploy files via SCP
+        run: |
+          scp -r -v -o ConnectTimeout=30 PublishedApp/* ${{ env.VM_USER }}@${{ env.VM_IP }}:${{ env.DEPLOY_PATH }}
 
       - name: Restart IIS
         run: |
-          ssh -o StrictHostKeyChecking=no vmadmin@20.81.164.12 "iisreset"
+          ssh -v -o ConnectTimeout=30 ${{ env.VM_USER }}@${{ env.VM_IP }} "iisreset"
