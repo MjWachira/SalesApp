@@ -38,10 +38,6 @@ jobs:
           name: salesapp
           path: PublishedApp
 
-      - name: List downloaded files (debug)
-        run: dir PublishedApp /s
-        shell: cmd
-
       - name: Install SSH key and test connection
         uses: shimataro/ssh-key-action@v2
         with:
@@ -55,16 +51,16 @@ jobs:
               StrictHostKeyChecking no
 
       - name: Test SSH connection
-        run: ssh azure-vm "echo 'SSH connection successful!'"
+        run: ssh azure-vm "echo SSH connection successful!"
 
-      - name: Create remote directory (if needed)
-        run: ssh azure-vm "mkdir -p C:/inetpub/salesapp"
+      - name: Create remote directory (Windows compatible)
+        run: ssh azure-vm "if not exist C:\inetpub\salesapp mkdir C:\inetpub\salesapp"
 
-      - name: Deploy to Azure VM via SCP
-        run: scp -v -r PublishedApp/* azure-vm:C:/inetpub/salesapp
+      - name: Deploy to Azure VM via SCP (Windows paths)
+        run: scp -r PublishedApp/* azure-vm:"C:/inetpub/salesapp/"
 
       - name: Verify deployment
-        run: ssh azure-vm "dir C:/inetpub/salesapp"
+        run: ssh azure-vm "dir C:\inetpub\salesapp"
 
       - name: Restart IIS
         run: ssh azure-vm "iisreset"
