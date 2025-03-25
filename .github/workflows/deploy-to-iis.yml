@@ -51,22 +51,29 @@ jobs:
               StrictHostKeyChecking no
 
       - name: Stop IIS Application Pool
-        run: ssh azure-vm "appcmd stop apppool /apppool.name:SalesAppPool"
+        run: ssh azure-vm "powershell Stop-WebAppPool -Name 'SalesAppPool'"
 
       - name: Clean target directory
-        run: ssh azure-vm "if exist C:\inetpub\wwwroot\SalesApp (takeown /f C:\inetpub\wwwroot\SalesApp\* /r /a /d Y && icacls C:\inetpub\wwwroot\SalesApp\* /grant administrators:F /t && rmdir /s /q C:\inetpub\wwwroot\SalesApp) && mkdir C:\inetpub\wwwroot\SalesApp"
+        run: |
+          ssh azure-vm "powershell -Command \"
+            if (Test-Path C:\\inetpub\\wwwroot\\SalesApp) {
+              Get-ChildItem C:\\inetpub\\wwwroot\\SalesApp | ForEach-Object { \$_.Attributes = 'Normal' }
+              Remove-Item C:\\inetpub\\wwwroot\\SalesApp\\* -Recurse -Force
+            }
+            New-Item -Path C:\\inetpub\\wwwroot\\SalesApp -ItemType Directory -Force
+          \""
 
       - name: Deploy new files
         run: scp -r PublishedApp/* azure-vm:"C:/inetpub/wwwroot/SalesApp/"
 
       - name: Set permissions
-        run: ssh azure-vm "icacls C:\inetpub\wwwroot\SalesApp /grant IIS_IUSRS:(OI)(CI)F /grant 'vmadmin:(OI)(CI)F'"
+        run: ssh azure-vm "powershell icacls C:\\inetpub\\wwwroot\\SalesApp /grant IIS_IUSRS:(OI)(CI)F /grant 'vmadmin:(OI)(CI)F'"
 
       - name: Start IIS Application Pool
-        run: ssh azure-vm "appcmd start apppool /apppool.name:SalesAppPool"
+        run: ssh azure-vm "powershell Start-WebAppPool -Name 'SalesAppPool'"
 
       - name: Verify deployment
-        run: ssh azure-vm "dir C:\inetpub\wwwroot\SalesApp"
+        run: ssh azure-vm "powershell Get-ChildItem C:\\inetpub\\wwwroot\\SalesApp"
 
       - name: Warmup application
-        run: ssh azure-vm "curl http://localhost/SalesApp/swagger/index.html > nul"
+        run: ssh azure-vm "powershell Invoke-WebRequest -Uri 'http://localhost/SalesApp/swagger/index.html' -UseBasicParsing | Out-Null"
