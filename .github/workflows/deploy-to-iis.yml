@@ -50,30 +50,23 @@ jobs:
               IdentityFile ~/.ssh/id_rsa
               StrictHostKeyChecking no
 
-      - name: Stop IIS Application Pool
-        run: ssh azure-vm "powershell Stop-WebAppPool -Name 'SalesAppPool'"
-
-      - name: Clean target directory
+      - name: Prepare target directory
         run: |
           ssh azure-vm "powershell -Command \"
-            if (Test-Path C:\\inetpub\\wwwroot\\SalesApp) {
-              Get-ChildItem C:\\inetpub\\wwwroot\\SalesApp | ForEach-Object { \$_.Attributes = 'Normal' }
-              Remove-Item C:\\inetpub\\wwwroot\\SalesApp\\* -Recurse -Force
+            if (!(Test-Path C:\\inetpub\\wwwroot\\SalesApp)) {
+              New-Item -Path C:\\inetpub\\wwwroot\\SalesApp -ItemType Directory
             }
-            New-Item -Path C:\\inetpub\\wwwroot\\SalesApp -ItemType Directory -Force
+            Get-ChildItem C:\\inetpub\\wwwroot\\SalesApp | Remove-Item -Recurse -Force
           \""
 
-      - name: Deploy new files
-        run: scp -r PublishedApp/* azure-vm:"C:/inetpub/wwwroot/SalesApp/"
+      - name: Deploy files
+        run: scp -rp PublishedApp/* azure-vm:"C:/inetpub/wwwroot/SalesApp/"
 
       - name: Set permissions
         run: ssh azure-vm "powershell icacls C:\\inetpub\\wwwroot\\SalesApp /grant IIS_IUSRS:(OI)(CI)F /grant 'vmadmin:(OI)(CI)F'"
 
-      - name: Start IIS Application Pool
-        run: ssh azure-vm "powershell Start-WebAppPool -Name 'SalesAppPool'"
-
       - name: Verify deployment
         run: ssh azure-vm "powershell Get-ChildItem C:\\inetpub\\wwwroot\\SalesApp"
 
-      - name: Warmup application
-        run: ssh azure-vm "powershell Invoke-WebRequest -Uri 'http://localhost/SalesApp/swagger/index.html' -UseBasicParsing | Out-Null"
+      - name: Restart IIS
+        run: ssh azure-vm "iisreset"
