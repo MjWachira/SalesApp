@@ -79,14 +79,20 @@ stages:
           Write-Host "##[section]File deployment completed successfully"
 
     - task: PowerShell@2
-      displayName: 'Fix IIS Permissions'
+      displayName: 'Deploy Files to IIS Server'
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "##[section]Setting permissions for IIS..."
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant `"IIS_IUSRS:F`" /T`""
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant `"'NT AUTHORITY\SYSTEM':F`" /T`""
-          Write-Host "##[section]Permissions set successfully"
+          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot\SalesApp"
+
+          # 1. Remove existing files (ensuring directory is clean)
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
+
+          # 2. Copy files directly without "salesapp" subfolder
+          scp -r -o BatchMode=yes "$(Build.ArtifactStagingDirectory)/PublishedApp/*" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+
+          Write-Host "##[section]File deployment completed successfully"
+
 
     - script: |
         ssh -o BatchMode=yes vmadmin@20.81.164.12 "iisreset"
