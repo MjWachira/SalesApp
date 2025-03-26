@@ -63,8 +63,14 @@ stages:
       displayName: 'Create SalesApp Directory'
 
     - script: |
-        echo "Deploying application files directly to C:\inetpub\wwwroot\SalesApp"
-        scp -v -r -o BatchMode=yes $(Build.ArtifactStagingDirectory)/PublishedApp/. vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+        echo "Deploying files directly to C:\inetpub\wwwroot\SalesApp"
+        # First remove existing files if any
+        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"Remove-Item 'C:\\inetpub\\wwwroot\\SalesApp\\*' -Recurse -Force\""
+        # Copy files individually
+        cd $(Build.ArtifactStagingDirectory)/PublishedApp
+        for file in $(ls -A1); do
+          scp -v -r -o BatchMode=yes "$file" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+        done
       displayName: 'Copy Files to SalesApp'
 
     - task: PowerShell@2
