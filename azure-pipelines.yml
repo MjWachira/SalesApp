@@ -29,7 +29,7 @@ stages:
       displayName: 'Upload Build Artifact'
       inputs:
         pathToPublish: '$(Build.ArtifactStagingDirectory)/PublishedApp'
-        artifactName: 'salesapp'
+        artifactName: 'SalesApp'
 
 - stage: Deploy
   displayName: 'Deploy Stage'
@@ -43,7 +43,7 @@ stages:
       inputs:
         buildType: 'current'
         downloadType: 'single'
-        artifactName: 'salesapp'
+        artifactName: 'SalesApp'
         downloadPath: '$(Build.ArtifactStagingDirectory)/PublishedApp'
 
     - task: InstallSSHKey@0
@@ -59,7 +59,7 @@ stages:
       displayName: 'Verify SSH Connection'
 
     - script: |
-        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"if (-not (Test-Path 'C:\\inetpub\\wwwroot\\SalesApp')) { New-Item -ItemType Directory -Path 'C:\\inetpub\\wwwroot\\SalesApp' -Force }\""
+        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"if (-not (Test-Path 'C:\\inetpub\\wwwroot')) { New-Item -ItemType Directory -Path 'C:\\inetpub\\wwwroot' -Force }\""
       displayName: 'Create SalesApp Directory'
 
     - task: PowerShell@2
@@ -67,14 +67,14 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot\SalesApp"
+          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot"
 
           # 1. Remove existing files (ensuring directory is clean)
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot*' -Recurse -Force -ErrorAction SilentlyContinue`""
 
           # 2. Copy files from build agent to IIS server
           $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp/*"
-          scp -r -o BatchMode=yes "$sourcePath" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+          scp -r -o BatchMode=yes "$sourcePath" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/"
 
           Write-Host "##[section]File deployment completed successfully"
 
@@ -83,13 +83,13 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot\SalesApp"
+          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot"
 
           # 1. Remove existing files (ensuring directory is clean)
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\*' -Recurse -Force -ErrorAction SilentlyContinue`""
 
           # 2. Copy files directly without "salesapp" subfolder
-          scp -r -o BatchMode=yes "$(Build.ArtifactStagingDirectory)/PublishedApp/*" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+          scp -r -o BatchMode=yes "$(Build.ArtifactStagingDirectory)/PublishedApp/*" vmadmin@20.81.164.12:"C:/inetpub/"
 
           Write-Host "##[section]File deployment completed successfully"
 
