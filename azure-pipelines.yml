@@ -51,38 +51,47 @@ stages:
       inputs:
         knownHostsEntry: $(KNOWN_HOSTS)
         sshKeySecureFile: 'SSH_PRIVATE_KEY'
+        sshPassphrase: ''
 
     - script: |
         ssh-keyscan -H 20.81.164.12 >> ~/.ssh/known_hosts
-        ssh -o BatchMode=yes vmadmin@20.81.164.12 "echo SSH connection verified!"
+        ssh -o BatchMode=yes -v vmadmin@20.81.164.12 "echo SSH connection verified!"
       displayName: 'Verify SSH Connection'
 
     - script: |
-        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"New-Item -ItemType Directory -Path 'C:\inetpub\wwwroot\SalesApp' -Force`""
+        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command New-Item -ItemType Directory -Path 'C:\inetpub\wwwroot\SalesApp' -Force"
       displayName: 'Ensure Deployment Directory Exists'
 
     - task: PowerShell@2
-      displayName: 'Deploy Files to IIS Server'
+      displayName: 'Copy Files to SalesApp'
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot\SalesApp"
+          Write-Host "Deploying files to C:\inetpub\wwwroot\SalesApp"
 
-          # Remove old files
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
+          # Clear target directory
+          $clearCommand = "Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue"
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$clearCommand`""
 
-          # Copy new files
-          scp -r -o BatchMode=yes "$(Build.ArtifactStagingDirectory)/PublishedApp/*" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
-
-          Write-Host "##[section]File deployment completed successfully"
+          # Copy files using SCP
+          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
+          Write-Host "Starting file transfer..."
+          scp -v -r -o BatchMode=yes "$sourcePath/*" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+          Write-Host "File copy completed successfully"
 
     - task: PowerShell@2
       displayName: 'Fix IIS Permissions'
       inputs:
         targetType: 'inline'
         script: |
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'IIS_IUSRS:F' /T`""
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'SYSTEM:F' /T`""
+          Write-Host "Setting permissions for IIS..."
+          $setPerms = @'
+          icacls "C:\inetpub\wwwroot\SalesApp" /grant IIS_IUSRS:(OI)(CI)F /T
+          icacls "C:\inetpub\wwwroot\SalesApp" /grant "NT AUTHORITY\SYSTEM":(OI)(CI)F /T
+          exit 0
+          '@
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$setPerms`""
+          Write-Host "Permissions set successfully"
 
     - script: |
         ssh -o BatchMode=yes vmadmin@20.81.164.12 "iisreset"
