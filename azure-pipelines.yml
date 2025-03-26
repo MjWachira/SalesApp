@@ -59,21 +59,24 @@ stages:
       displayName: 'Verify SSH Connection'
 
     - script: |
-        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"if (-not (Test-Path 'C:\\inetpub\\wwwroot\\salesapp')) { New-Item -ItemType Directory -Path 'C:\\inetpub\\wwwroot\\salesapp' -Force }\""
-      displayName: 'Ensure SalesApp Directory Exists'
+        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"if (-not (Test-Path 'C:\\inetpub\\wwwroot\\SalesApp')) { New-Item -ItemType Directory -Path 'C:\\inetpub\\wwwroot\\SalesApp' -Force }\""
+      displayName: 'Create SalesApp Directory'
 
     - task: PowerShell@2
-      displayName: 'Copy Files to SalesApp'
+      displayName: 'Deploy Files to IIS Server'
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "##[section]Cleaning existing files in SalesApp..."
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\salesapp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
+          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot\SalesApp"
 
-          Write-Host "##[section]Copying files using SCP..."
-          scp -r -o BatchMode=yes "$(Build.ArtifactStagingDirectory)/PublishedApp/*" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/salesapp/"
+          # 1. Remove existing files (ensuring directory is clean)
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
 
-          Write-Host "##[section]File copy completed successfully"
+          # 2. Copy files from build agent to IIS server
+          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp/*"
+          scp -r -o BatchMode=yes "$sourcePath" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+
+          Write-Host "##[section]File deployment completed successfully"
 
     - task: PowerShell@2
       displayName: 'Fix IIS Permissions'
@@ -81,8 +84,8 @@ stages:
         targetType: 'inline'
         script: |
           Write-Host "##[section]Setting permissions for IIS..."
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\salesapp' /grant IIS_IUSRS:(OI)(CI)F /T`""
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\salesapp' /grant 'NT AUTHORITY\SYSTEM':(OI)(CI)F /T`""
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant `"IIS_IUSRS:F`" /T`""
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant `"'NT AUTHORITY\SYSTEM':F`" /T`""
           Write-Host "##[section]Permissions set successfully"
 
     - script: |
