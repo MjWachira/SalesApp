@@ -63,24 +63,31 @@ stages:
       displayName: 'Create SalesApp Directory'
 
     - task: PowerShell@2
-      displayName: 'Deploy Files Correctly'
+      displayName: 'Deploy Files to Correct Location'
       inputs:
         targetType: 'inline'
         script: |
-          # FIRST SOLUTION: Using tar over SSH (most reliable)
-          Write-Host "##[section]Deploying files using tar over SSH"
-          cd $(Build.ArtifactStagingDirectory)/PublishedApp
-          tar cf - . | ssh -o BatchMode=yes vmadmin@20.81.164.12 "cd /cygdrive/c/inetpub/wwwroot/SalesApp && tar xf -"
-          
-          # ALTERNATIVE SOLUTION: Using rsync (if available)
-          # Write-Host "##[section]Deploying files using rsync"
-          # rsync -avz -e "ssh -o BatchMode=yes" $(Build.ArtifactStagingDirectory)/PublishedApp/ vmadmin@20.81.164.12:/cygdrive/c/inetpub/wwwroot/SalesApp/
+          # 1. Clean target directory
+          Write-Host "##[section]Preparing target directory..."
+          $cleanCommand = @"
+          Remove-Item 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue
+          "@
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$cleanCommand`""
 
-          # SECOND ALTERNATIVE: Manual file copy (if above methods fail)
-          # Write-Host "##[section]Deploying files manually"
-          # $source = "$(Build.ArtifactStagingDirectory)/PublishedApp/*"
-          # ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"Remove-Item 'C:\\inetpub\\wwwroot\\SalesApp\\*' -Recurse -Force\""
-          # scp -r -o BatchMode=yes $source vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+          # 2. Copy all contents (files and folders) directly to SalesApp
+          Write-Host "##[section]Copying files to C:\inetpub\wwwroot\SalesApp..."
+          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
+          Get-ChildItem -Path $sourcePath | ForEach-Object {
+              $item = $_
+              if ($item.PSIsContainer) {
+                  Write-Host "Copying directory: $($item.Name)"
+                  scp -r -o BatchMode=yes "$($item.FullName)" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/$($item.Name)"
+              } else {
+                  Write-Host "Copying file: $($item.Name)"
+                  scp -o BatchMode=yes "$($item.FullName)" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/$($item.Name)"
+              }
+          }
+          Write-Host "##[section]File deployment completed successfully"
 
     - task: PowerShell@2
       displayName: 'Set Permissions'
