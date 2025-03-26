@@ -50,25 +50,40 @@ stages:
       displayName: 'Install SSH Key'
       inputs:
         knownHostsEntry: $(KNOWN_HOSTS)
-        sshKeySecureFile: SSH_PRIVATE_KEY
+        sshKeySecureFile: 'SSH_PRIVATE_KEY'
         sshPassphrase: ''
 
     - script: |
-        ssh vmadmin@20.81.164.12 "echo SSH connection verified!"
+        ssh-keyscan -H 20.81.164.12 >> ~/.ssh/known_hosts
+        ssh -o BatchMode=yes -v vmadmin@20.81.164.12 "echo SSH connection verified!"
       displayName: 'Verify SSH Connection'
 
-    - script: |
-        ssh vmadmin@20.81.164.12 "mkdir -p C:/inetpub/wwwroot/SalesApp && mkdir -p C:/inetpub/wwwroot/SalesApp/wwwroot"
+    - task: PowerShell@2
       displayName: 'Create Target Directory Structure'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $createDirs = @"
+          New-Item -ItemType Directory -Path "C:\inetpub\wwwroot\SalesApp\wwwroot" -Force
+          exit 0
+          "@
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$createDirs`""
 
     - script: |
-        scp -r $(Build.ArtifactStagingDirectory)/PublishedApp/* vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+        scp -v -r -o BatchMode=yes $(Build.ArtifactStagingDirectory)/PublishedApp/* vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
       displayName: 'Deploy Files to IIS wwwroot'
 
-    - script: |
-        ssh vmadmin@20.81.164.12 "icacls C:\\inetpub\\wwwroot\\SalesApp /grant IIS_IUSRS:(OI)(CI)F"
+    - task: PowerShell@2
       displayName: 'Set Proper Permissions'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $setPerms = @"
+          icacls "C:\inetpub\wwwroot\SalesApp" /grant IIS_IUSRS:(OI)(CI)F
+          exit 0
+          "@
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$setPerms`""
 
     - script: |
-        ssh vmadmin@20.81.164.12 "iisreset"
+        ssh -o BatchMode=yes vmadmin@20.81.164.12 "iisreset"
       displayName: 'Restart IIS'
