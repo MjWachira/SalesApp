@@ -85,13 +85,10 @@ stages:
         targetType: 'inline'
         script: |
           Write-Host "Setting permissions for IIS..."
-          $setPerms = @'
-          icacls "C:\inetpub\wwwroot\SalesApp" /grant IIS_IUSRS:(OI)(CI)F /T
-          icacls "C:\inetpub\wwwroot\SalesApp" /grant "NT AUTHORITY\SYSTEM":(OI)(CI)F /T
-          exit 0
-          '@
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$setPerms`""
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'IIS_IUSRS:(OI)(CI)F' /T`""
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'NT AUTHORITY\SYSTEM:(OI)(CI)F' /T`""
           Write-Host "Permissions set successfully"
+
 
     - script: |
         ssh -o BatchMode=yes vmadmin@20.81.164.12 "iisreset"
