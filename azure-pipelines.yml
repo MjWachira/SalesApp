@@ -63,8 +63,8 @@ stages:
       displayName: 'Create SalesApp Directory'
 
     - script: |
-        echo "Deploying application files to C:\inetpub\wwwroot\SalesApp"
-        scp -v -r -o BatchMode=yes $(Build.ArtifactStagingDirectory)/PublishedApp/* vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+        echo "Deploying application files directly to C:\inetpub\wwwroot\SalesApp"
+        scp -v -r -o BatchMode=yes $(Build.ArtifactStagingDirectory)/PublishedApp/. vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
       displayName: 'Copy Files to SalesApp'
 
     - task: PowerShell@2
