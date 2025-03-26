@@ -52,6 +52,7 @@ stages:
         knownHostsEntry: $(KNOWN_HOSTS)
         sshPublicKey: $(SSH_PUBLIC_KEY)
         sshKeySecureFile: SSH_PRIVATE_KEY
+        sshPassphrase: ''
 
     - script: |
         ssh vmadmin@20.81.164.12 "echo SSH connection verified!"
