@@ -70,7 +70,7 @@ stages:
           Write-Host "Deploying files to C:\inetpub\wwwroot\SalesApp"
 
           # Clear target directory
-          $clearCommand = "Remove-Item -Path 'C:\inetpub\wwwroot\*' -Recurse -Force -ErrorAction SilentlyContinue"
+          $clearCommand = "Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp*' -Recurse -Force -ErrorAction SilentlyContinue"
           ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$clearCommand`""
 
           # Copy files using SCP
