@@ -1,5 +1,5 @@
 trigger:
-- main
+  - main
 
 pool:
   name: SelfHostedPool
@@ -29,7 +29,7 @@ stages:
       displayName: 'Upload Build Artifact'
       inputs:
         pathToPublish: '$(Build.ArtifactStagingDirectory)/PublishedApp'
-        artifactName: 'salesapp'
+        artifactName: 'PublishedApp'  # Changed artifact name to avoid confusion
 
 - stage: Deploy
   displayName: 'Deploy Stage'
@@ -43,7 +43,7 @@ stages:
       inputs:
         buildType: 'current'
         downloadType: 'single'
-        artifactName: 'salesapp'
+        artifactName: 'PublishedApp'  # Using the correct artifact name
         downloadPath: '$(Build.ArtifactStagingDirectory)/PublishedApp'
 
     - task: InstallSSHKey@0
@@ -68,23 +68,20 @@ stages:
         targetType: 'inline'
         script: |
           # 1. Clean target directory
-          Write-Host "##[section]Preparing target directory..."
-          $cleanCommand = @"
-          Remove-Item 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue
-          "@
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$cleanCommand`""
+          Write-Host "##[section]Cleaning target directory..."
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
 
-          # 2. Copy all contents (files and folders) directly to SalesApp
+          # 2. Copy contents of PublishedApp (without adding another subfolder)
           Write-Host "##[section]Copying files to C:\inetpub\wwwroot\SalesApp..."
           $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
           Get-ChildItem -Path $sourcePath | ForEach-Object {
               $item = $_
               if ($item.PSIsContainer) {
                   Write-Host "Copying directory: $($item.Name)"
-                  scp -r -o BatchMode=yes "$($item.FullName)" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/$($item.Name)"
+                  scp -r -o BatchMode=yes "$($item.FullName)" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
               } else {
                   Write-Host "Copying file: $($item.Name)"
-                  scp -o BatchMode=yes "$($item.FullName)" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/$($item.Name)"
+                  scp -o BatchMode=yes "$($item.FullName)" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
               }
           }
           Write-Host "##[section]File deployment completed successfully"
@@ -94,12 +91,9 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          $setPerms = @'
-          & icacls "C:\inetpub\wwwroot\SalesApp" /grant IIS_IUSRS:(OI)(CI)F /T
-          & icacls "C:\inetpub\wwwroot\SalesApp" /grant "NT AUTHORITY\SYSTEM":(OI)(CI)F /T
-          exit 0
-          '@
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$setPerms`""
+          Write-Host "##[section]Setting permissions..."
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant IIS_IUSRS:(OI)(CI)F /T`""
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'NT AUTHORITY\SYSTEM':(OI)(CI)F /T`""
 
     - script: |
         ssh -o BatchMode=yes vmadmin@20.81.164.12 "iisreset"
