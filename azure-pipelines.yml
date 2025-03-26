@@ -79,8 +79,8 @@ stages:
         targetType: 'inline'
         script: |
           $setPerms = @"
-          icacls "C:\inetpub\wwwroot\SalesApp" /grant IIS_IUSRS:(OI)(CI)F
-          exit 0
+          & icacls "C:\inetpub\wwwroot\SalesApp" /grant IIS_IUSRS:`(OI`)`(CI`)F
+          exit $LASTEXITCODE
           "@
           ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$setPerms`""
 
