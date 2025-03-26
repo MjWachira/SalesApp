@@ -62,16 +62,25 @@ stages:
         ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"if (-not (Test-Path 'C:\\inetpub\\wwwroot\\SalesApp')) { New-Item -ItemType Directory -Path 'C:\\inetpub\\wwwroot\\SalesApp' -Force }\""
       displayName: 'Create SalesApp Directory'
 
-    - script: |
-        echo "Deploying files directly to C:\inetpub\wwwroot\SalesApp"
-        # First remove existing files if any
-        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"Remove-Item 'C:\\inetpub\\wwwroot\\SalesApp\\*' -Recurse -Force\""
-        # Copy files individually
-        cd $(Build.ArtifactStagingDirectory)/PublishedApp
-        for file in $(ls -A1); do
-          scp -v -r -o BatchMode=yes "$file" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
-        done
+    - task: PowerShell@2
       displayName: 'Copy Files to SalesApp'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "Deploying files directly to C:\inetpub\wwwroot\SalesApp"
+          
+          # Clear target directory
+          $clearCommand = "Remove-Item 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue"
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$clearCommand`""
+          
+          # Copy files
+          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
+          Get-ChildItem -Path $sourcePath | ForEach-Object {
+              $fileName = $_.Name
+              Write-Host "Copying $fileName..."
+              scp -v -r -o BatchMode=yes "$sourcePath/$fileName" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
+          }
+          Write-Host "File copy completed successfully"
 
     - task: PowerShell@2
       displayName: 'Set Permissions'
