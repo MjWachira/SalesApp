@@ -58,21 +58,12 @@ stages:
         ssh -o BatchMode=yes -v vmadmin@20.81.164.12 "echo SSH connection verified!"
       displayName: 'Verify SSH Connection'
 
-    - task: PowerShell@2
+    - script: |
+        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"if (-not (Test-Path 'C:\\inetpub\\wwwroot\\SalesApp')) { New-Item -ItemType Directory -Path 'C:\\inetpub\\wwwroot\\SalesApp' -Force }\""
       displayName: 'Create SalesApp Directory'
-      inputs:
-        targetType: 'inline'
-        script: |
-          $createDir = @"
-          if (-not (Test-Path "C:\inetpub\wwwroot\SalesApp")) {
-              New-Item -ItemType Directory -Path "C:\inetpub\wwwroot\SalesApp" -Force
-          }
-          exit 0
-          "@
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$createDir`""
 
     - script: |
-        echo "Deploying files to C:\inetpub\wwwroot\SalesApp\"
+        echo "Deploying application files to C:\inetpub\wwwroot\SalesApp"
         scp -v -r -o BatchMode=yes $(Build.ArtifactStagingDirectory)/PublishedApp/* vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
       displayName: 'Copy Files to SalesApp'
 
@@ -81,11 +72,11 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          $setPerms = @"
-          & icacls "C:\inetpub\wwwroot\SalesApp" /grant IIS_IUSRS:`(OI`)`(CI`)F /T
-          & icacls "C:\inetpub\wwwroot\SalesApp" /grant "NT AUTHORITY\SYSTEM":`(OI`)`(CI`)F /T
+          $setPerms = @'
+          & icacls "C:\inetpub\wwwroot\SalesApp" /grant IIS_IUSRS:(OI)(CI)F /T
+          & icacls "C:\inetpub\wwwroot\SalesApp" /grant "NT AUTHORITY\SYSTEM":(OI)(CI)F /T
           exit 0
-          "@
+          '@
           ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$setPerms`""
 
     - script: |
