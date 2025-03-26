@@ -51,48 +51,38 @@ stages:
       inputs:
         knownHostsEntry: $(KNOWN_HOSTS)
         sshKeySecureFile: 'SSH_PRIVATE_KEY'
-        sshPassphrase: ''
 
     - script: |
         ssh-keyscan -H 20.81.164.12 >> ~/.ssh/known_hosts
-        ssh -o BatchMode=yes -v vmadmin@20.81.164.12 "echo SSH connection verified!"
+        ssh -o BatchMode=yes vmadmin@20.81.164.12 "echo SSH connection verified!"
       displayName: 'Verify SSH Connection'
 
     - script: |
-        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"if (-not (Test-Path 'C:\\inetpub\\wwwroot')) { New-Item -ItemType Directory -Path 'C:\\inetpub\\wwwroot' -Force }\""
-      displayName: 'Create SalesApp Directory'
+        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"New-Item -ItemType Directory -Path 'C:\inetpub\wwwroot\SalesApp' -Force`""
+      displayName: 'Ensure Deployment Directory Exists'
 
     - task: PowerShell@2
       displayName: 'Deploy Files to IIS Server'
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot"
+          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot\SalesApp"
 
-          # 1. Remove existing files (ensuring directory is clean)
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot*' -Recurse -Force -ErrorAction SilentlyContinue`""
+          # Remove old files
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
 
-          # 2. Copy files from build agent to IIS server
-          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp/*"
-          scp -r -o BatchMode=yes "$sourcePath" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/"
+          # Copy new files
+          scp -r -o BatchMode=yes "$(Build.ArtifactStagingDirectory)/PublishedApp/*" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
 
           Write-Host "##[section]File deployment completed successfully"
 
     - task: PowerShell@2
-      displayName: 'Deploy Files to IIS Server'
+      displayName: 'Fix IIS Permissions'
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "##[section]Deploying files to C:\inetpub\wwwroot"
-
-          # 1. Remove existing files (ensuring directory is clean)
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\*' -Recurse -Force -ErrorAction SilentlyContinue`""
-
-          # 2. Copy files directly without "salesapp" subfolder
-          scp -r -o BatchMode=yes "$(Build.ArtifactStagingDirectory)/PublishedApp/*" vmadmin@20.81.164.12:"C:/inetpub/"
-
-          Write-Host "##[section]File deployment completed successfully"
-
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'IIS_IUSRS:F' /T`""
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'SYSTEM:F' /T`""
 
     - script: |
         ssh -o BatchMode=yes vmadmin@20.81.164.12 "iisreset"
