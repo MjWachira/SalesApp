@@ -89,7 +89,6 @@ stages:
           ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'NT AUTHORITY\SYSTEM:(OI)(CI)F' /T`""
           Write-Host "Permissions set successfully"
 
-
     - script: |
         ssh -o BatchMode=yes vmadmin@20.81.164.12 "iisreset"
       displayName: 'Restart IIS'
