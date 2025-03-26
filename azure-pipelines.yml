@@ -63,24 +63,24 @@ stages:
       displayName: 'Create SalesApp Directory'
 
     - task: PowerShell@2
-      displayName: 'Copy Files to SalesApp'
+      displayName: 'Deploy Files Correctly'
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "Deploying files directly to C:\inetpub\wwwroot\SalesApp"
+          # FIRST SOLUTION: Using tar over SSH (most reliable)
+          Write-Host "##[section]Deploying files using tar over SSH"
+          cd $(Build.ArtifactStagingDirectory)/PublishedApp
+          tar cf - . | ssh -o BatchMode=yes vmadmin@20.81.164.12 "cd /cygdrive/c/inetpub/wwwroot/SalesApp && tar xf -"
           
-          # Clear target directory
-          $clearCommand = "Remove-Item 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue"
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$clearCommand`""
-          
-          # Copy files
-          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
-          Get-ChildItem -Path $sourcePath | ForEach-Object {
-              $fileName = $_.Name
-              Write-Host "Copying $fileName..."
-              scp -v -r -o BatchMode=yes "$sourcePath/$fileName" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
-          }
-          Write-Host "File copy completed successfully"
+          # ALTERNATIVE SOLUTION: Using rsync (if available)
+          # Write-Host "##[section]Deploying files using rsync"
+          # rsync -avz -e "ssh -o BatchMode=yes" $(Build.ArtifactStagingDirectory)/PublishedApp/ vmadmin@20.81.164.12:/cygdrive/c/inetpub/wwwroot/SalesApp/
+
+          # SECOND ALTERNATIVE: Manual file copy (if above methods fail)
+          # Write-Host "##[section]Deploying files manually"
+          # $source = "$(Build.ArtifactStagingDirectory)/PublishedApp/*"
+          # ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command \"Remove-Item 'C:\\inetpub\\wwwroot\\SalesApp\\*' -Recurse -Force\""
+          # scp -r -o BatchMode=yes $source vmadmin@20.81.164.12:"C:/inetpub/wwwroot/SalesApp/"
 
     - task: PowerShell@2
       displayName: 'Set Permissions'
