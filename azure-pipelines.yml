@@ -75,12 +75,13 @@ stages:
 
           # Copy files using SCP
           $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
+          icacls "C:\inetpub\wwwroot\SalesApp" /grant vmadmin:(OI)(CI)F /T
           Write-Host "Starting file transfer..."
           scp -v -r -o BatchMode=yes "$sourcePath/*" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/"
           Write-Host "File copy completed successfully"
 
     - task: PowerShell@2
-      displayName: 'Fix IIS Permissions'
+      displayName: 'IIS Permissions'
       inputs:
         targetType: 'inline'
         script: |
