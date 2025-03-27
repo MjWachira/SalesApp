@@ -67,21 +67,27 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "Deploying files to C:\inetpub\wwwroot\SalesApp"
+          Write-Host "Stopping IIS to prevent file lock issues..."
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Stop-Service -Name W3SVC -Force`""
 
-          # Clear target directory
-          $clearCommand = "Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp*' -Recurse -Force -ErrorAction SilentlyContinue"
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"$clearCommand`""
+          Write-Host "Removing old files inside SalesApp, but keeping the folder..."
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
 
-          # Copy files using SCP
-          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
-          icacls "C:\inetpub\wwwroot\SalesApp" /grant "vmadmin:(OI)(CI)F" /T
+          Write-Host "Setting correct permissions (if needed)..."
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant vmadmin:F /inheritance:e /T`""
+
           Write-Host "Starting file transfer..."
-          scp -v -r -o BatchMode=yes "$sourcePath/*" vmadmin@20.81.164.12:"C:/inetpub/wwwroot/"
-          Write-Host "File copy completed successfully"
+          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
+          scp -v -r -o BatchMode=yes "$sourcePath/*" vmadmin@20.81.164.12:C:\\inetpub\\wwwroot\\SalesApp\\
+
+          Write-Host "Restarting IIS..."
+          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Start-Service -Name W3SVC`""
+
+          Write-Host "Deployment completed successfully!"
+
 
     - task: PowerShell@2
-      displayName: 'IIS Permissions'
+      displayName: 'Set IIS Permissions'
       inputs:
         targetType: 'inline'
         script: |
