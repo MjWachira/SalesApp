@@ -78,7 +78,7 @@ stages:
 
           Write-Host "Starting file transfer..."
           $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
-          scp -v -r -o BatchMode=yes "$sourcePath/*" vmadmin@20.81.164.12:C:\\inetpub\\wwwroot\\SalesApp\\
+          scp -v -r -o BatchMode=yes "$sourcePath/*" vmadmin@20.81.164.12:C:\\inetpub\\wwwroot\\
 
           Write-Host "Restarting IIS..."
           ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Start-Service -Name W3SVC`""
