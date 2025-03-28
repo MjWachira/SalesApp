@@ -68,7 +68,7 @@ stages:
       inputs:
         SourceFolder: 'C:\deploy\PublishedApp'
         Contents: '**'
-        TargetFolder: 'C:\inetpub\wwwroot\SalesApp'
+        TargetFolder: 'C:\inetpub\wwwroot'
         OverWrite: true
 
     - task: PowerShell@2
