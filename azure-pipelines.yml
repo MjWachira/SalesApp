@@ -2,7 +2,7 @@ trigger:
 - main
 
 pool:
-  name: SelfHostedPool
+  name: SelfHostedPool  # Ensure this pool has the IIS VM agent
 
 stages:
 - stage: Build
@@ -37,6 +37,9 @@ stages:
   jobs:
   - job: Deploy
     displayName: 'Deploy to IIS on Azure VM'
+    pool:
+      name: SelfHostedPool  # Using the agent installed on IIS VM
+
     steps:
     - task: DownloadBuildArtifacts@0
       displayName: 'Download Artifact'
@@ -44,58 +47,42 @@ stages:
         buildType: 'current'
         downloadType: 'single'
         artifactName: 'SalesApp'
-        downloadPath: '$(Build.ArtifactStagingDirectory)/PublishedApp'
-
-    - task: InstallSSHKey@0
-      displayName: 'Install SSH Key'
-      inputs:
-        knownHostsEntry: $(KNOWN_HOSTS)
-        sshKeySecureFile: 'SSH_PRIVATE_KEY'
-        sshPassphrase: ''
-
-    - script: |
-        ssh-keyscan -H 20.81.164.12 >> ~/.ssh/known_hosts
-        ssh -o BatchMode=yes -v vmadmin@20.81.164.12 "echo SSH connection verified!"
-      displayName: 'Verify SSH Connection'
-
-    - script: |
-        ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command New-Item -ItemType Directory -Path 'C:\inetpub\wwwroot\SalesApp' -Force"
-      displayName: 'Ensure Deployment Directory Exists'
+        downloadPath: 'C:\deploy\PublishedApp'
 
     - task: PowerShell@2
-      displayName: 'Copy Files to SalesApp'
+      displayName: 'Stop IIS Service'
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "Stopping IIS to prevent file lock issues..."
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Stop-Service -Name W3SVC -Force`""
+          Stop-Service -Name W3SVC -Force
 
-          Write-Host "Removing old files inside SalesApp, but keeping the folder..."
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue`""
+    - task: PowerShell@2
+      displayName: 'Remove Old Files'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Remove-Item -Path 'C:\inetpub\wwwroot\SalesApp\*' -Recurse -Force -ErrorAction SilentlyContinue
 
-          Write-Host "Setting correct permissions (if needed)..."
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant vmadmin:F /inheritance:e /T`""
-
-          Write-Host "Starting file transfer..."
-          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
-          scp -v -r -o BatchMode=yes "$sourcePath/*" vmadmin@20.81.164.12:C:\\inetpub\\wwwroot\\
-
-          Write-Host "Restarting IIS..."
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"Start-Service -Name W3SVC`""
-
-          Write-Host "Deployment completed successfully!"
-
+    - task: CopyFiles@2
+      displayName: 'Copy Files to IIS'
+      inputs:
+        SourceFolder: 'C:\deploy\PublishedApp'
+        Contents: '**'
+        TargetFolder: 'C:\inetpub\wwwroot\SalesApp'
+        OverWrite: true
 
     - task: PowerShell@2
       displayName: 'Set IIS Permissions'
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "Setting permissions for IIS..."
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'IIS_IUSRS:(OI)(CI)F' /T`""
-          ssh -o BatchMode=yes vmadmin@20.81.164.12 "powershell -Command `"icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'NT AUTHORITY\SYSTEM:(OI)(CI)F' /T`""
-          Write-Host "Permissions set successfully"
+          icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'IIS_IUSRS:(OI)(CI)F' /T
+          icacls 'C:\inetpub\wwwroot\SalesApp' /grant 'NT AUTHORITY\SYSTEM:(OI)(CI)F' /T
 
-    - script: |
-        ssh -o BatchMode=yes vmadmin@20.81.164.12 "iisreset"
+    - task: PowerShell@2
       displayName: 'Restart IIS'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Start-Service -Name W3SVC
+          iisreset
