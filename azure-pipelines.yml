@@ -61,7 +61,7 @@ stages:
         targetType: 'inline'
         script: |
           $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
-          $destinationPath = "C:\inetpub\wwwroot\SalesApp"
+          $destinationPath = "C:\inetpub\wwwroot"
 
           if (Test-Path $destinationPath) {
             Remove-Item -Recurse -Force $destinationPath
