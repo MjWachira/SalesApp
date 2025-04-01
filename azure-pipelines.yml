@@ -1,8 +1,8 @@
 trigger:
-- main
+- main  # Trigger the pipeline on commits to the 'main' branch
 
 pool:
-  name: 'LinuxPool'  # Use the Linux pool for running the pipeline tasks
+  name: 'Default'  # This is your default self-hosted agent pool name
 
 variables:
   buildConfiguration: 'Release'
@@ -10,68 +10,59 @@ variables:
   publishDirectory: '$(Build.ArtifactStagingDirectory)/publish'
 
 steps:
-# Step 1: Install .NET SDK
 - task: UseDotNet@2
   inputs:
     packageType: 'sdk'
-    version: '9.x'
+    version: '9.x'  # .NET 9 SDK
     installationPath: $(Agent.ToolsDirectory)/dotnet
 
-# Step 2: Restore NuGet packages
-- task: Restore@1
+# Use DotNetCoreCLI tasks instead of Restore, Build, and Publish tasks
+- task: DotNetCoreCLI@2
   inputs:
-    restoreSolution: '**/*.sln'
+    command: 'restore'
+    projects: '**/*.sln'  # Restore all solutions in the repo
 
-# Step 3: Build the application
-- task: Build@1
+- task: DotNetCoreCLI@2
   inputs:
-    solution: '**/*.sln'
+    command: 'build'
+    projects: '**/*.sln'  # Build all solutions in the repo
     buildConfiguration: $(buildConfiguration)
 
-# Step 4: Publish the application
-- task: Publish@1
+- task: DotNetCoreCLI@2
   inputs:
+    command: 'publish'
+    projects: '**/*.sln'  # Publish all solutions in the repo
     publishWebProjects: true
     publishDirectory: $(publishDirectory)
     arguments: '--configuration $(buildConfiguration) --output $(publishDirectory)'
 
-# Step 5: Copy published files to the build artifact staging directory
 - task: CopyFiles@2
   inputs:
     SourceFolder: $(publishDirectory)
     Contents: '**'
     TargetFolder: $(Build.ArtifactStagingDirectory)/SalesApp
 
-# Step 6: Publish build artifacts to be used in the release pipeline
 - task: PublishBuildArtifacts@1
   inputs:
     ArtifactName: 'SalesApp'
     publishLocation: 'Container'
 
-# Step 7: Deploy to IIS on the Windows VM using PowerShell (via Windows agent)
-- task: AzureFileCopy@4
+# Deployment to IIS on Self-hosted Agent VM
+- task: AzureCLI@2
   inputs:
-    SourcePath: $(Build.ArtifactStagingDirectory)/SalesApp
-    azureSubscription: 'john wachira free'  # Azure subscription name
-    Destination: 'IIS-VM'  # The name of your Windows IIS VM
-
-# Step 8: Use PowerShell to copy files to the IIS server and restart IIS
-- task: PowerShell@2
-  inputs:
-    targetType: 'inline'
-    script: |
+    scriptType: 'ps'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
       $ErrorActionPreference = "Stop"
       
-      # Define VM details
-      $VMName = "IIS-VN"  # Windows IIS VM Name
-      $VMResourceGroup = "IIS-RG"  # Resource Group name for the VM
-      $WebsitePath = "C:\inetpub\wwwroot\SalesApp"  # Path where the app will be copied on the IIS server
+      # Set paths
+      $sourcePath = "$(Build.ArtifactStagingDirectory)/SalesApp"
+      $destinationPath = "C:\inetpub\wwwroot\SalesApp"  # IIS root folder
+      
+      # Copy files to IIS directory
+      Copy-Item -Path $sourcePath\* -Destination $destinationPath -Recurse -Force
+      
+      # Restart IIS to apply changes
+      iisreset
 
-      # Connect to the VM via WinRM or use Azure CLI to copy files to the Windows VM
-      # Assuming you have a service connection and SSH/WinRM is enabled on the VM
-      Copy-Item -Path "$(Build.ArtifactStagingDirectory)\SalesApp\*" -Destination $WebsitePath -Recurse -Force
-
-      # Restart IIS to pick up the new application
-      Restart-Service -Name 'W3SVC'  # Restart IIS service to apply changes
-  displayName: 'Deploy to IIS Windows VM'
-  azureSubscription: 'john wachira free'  # Azure service connection name for authentication
+    displayName: 'Deploy to IIS Server on Self-Hosted Agent VM'
