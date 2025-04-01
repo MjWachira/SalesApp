@@ -61,14 +61,29 @@ stages:
         targetType: 'inline'
         script: |
           $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
-          $destinationPath = "C:\inetpub\wwwroot"
+          $destinationRootPath = "C:\inetpub\wwwroot"
+          $destinationPath = "C:\inetpub\wwwroot\SalesApp"
 
+          # Ensure the destination folder (SalesApp) exists
           if (Test-Path $destinationPath) {
             Remove-Item -Recurse -Force $destinationPath
           }
 
+          # Create the SalesApp directory inside wwwroot
           New-Item -ItemType Directory -Path $destinationPath -Force
-          Copy-Item -Path "$sourcePath\*" -Destination $destinationPath -Recurse -Force
+
+          # Copy the files to the root directory, not to SalesApp directly
+          Copy-Item -Path "$sourcePath\*" -Destination $destinationRootPath -Recurse -Force
+
+          # Set Full Control permissions for IIS_IUSRS on the SalesApp folder
+          $acl = Get-Acl $destinationPath
+          $rule = New-Object System.Security.AccessControl.FileSystemAccessRule("IIS_IUSRS", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+          $acl.SetAccessRule($rule)
+
+          # Apply the updated ACL to the SalesApp folder
+          Set-Acl -Path $destinationPath -AclObject $acl
+
+          Write-Host "Permissions successfully applied to $destinationPath"
 
     - task: PowerShell@2
       displayName: 'Start IIS After Deployment'
