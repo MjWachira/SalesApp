@@ -66,13 +66,13 @@ steps:
 
       # Grant permissions to the parent folder (to ensure that all future subfolders inherit permissions)
       Write-Host "Granting permissions to $parentPath"
-      icacls $parentPath /grant "NT AUTHORITY\NETWORK SERVICE:(OI)(CI)F" /T
-      icacls $parentPath /grant "BUILTIN\Users:(OI)(CI)F" /T
+      Start-Process powershell -ArgumentList "icacls $parentPath /grant 'NT AUTHORITY\NETWORK SERVICE:(OI)(CI)F' /T" -Verb RunAs
+      Start-Process powershell -ArgumentList "icacls $parentPath /grant 'BUILTIN\Users:(OI)(CI)F' /T" -Verb RunAs
 
       # Check if the folder exists, if not, create it
       if (-not (Test-Path $destinationPath)) {
         Write-Host "Creating folder: $destinationPath"
-        New-Item -ItemType Directory -Force -Path $destinationPath
+        Start-Process powershell -ArgumentList "New-Item -ItemType Directory -Force -Path $destinationPath" -Verb RunAs
       } else {
         Write-Host "Folder already exists. Clearing old files."
         # Remove any existing files in the folder
@@ -81,7 +81,7 @@ steps:
 
       # Copy files to IIS directory
       Write-Host "Copying files to $destinationPath"
-      Copy-Item -Path $sourcePath\* -Destination $destinationPath -Recurse -Force
+      Start-Process powershell -ArgumentList "Copy-Item -Path $sourcePath\* -Destination $destinationPath -Recurse -Force" -Verb RunAs
 
       # Restart IIS to apply changes
       Write-Host "Restarting IIS"
