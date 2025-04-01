@@ -1,12 +1,8 @@
 trigger:
 - main
 
-# pool:
-#   name: 'selfhosted'
- 
-
 pool:
-  name: "default"
+  name: "default"  # Use the default agent pool
 
 stages:
 - stage: Build
@@ -39,39 +35,44 @@ stages:
   displayName: 'Deploy Stage'
   dependsOn: Build
   jobs:
-  - deployment: DeployToIIS
-    displayName: 'Deploy to IIS using Deployment Group'
-    environment: 'IIS Clasic'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Artifact'
-            inputs:
-              buildType: 'current'
-              downloadType: 'single'
-              artifactName: 'SalesApp'
-              downloadPath: '$(Build.ArtifactStagingDirectory)/PublishedApp'
+  - job: DeployToIIS
+    displayName: 'Deploy to IIS using Default Pool'
+    pool:
+      name: "default"  # Ensure the deployment also runs on the default pool
+    steps:
+    - task: DownloadBuildArtifacts@0
+      displayName: 'Download Artifact'
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'SalesApp'
+        downloadPath: '$(Build.ArtifactStagingDirectory)/PublishedApp'
 
-          - task: IISWebAppManagementOnMachineGroup@0
-            displayName: 'Stop IIS Before Deployment'
-            inputs:
-              IISDeploymentType: 'IISWebsite'
-              ActionIISWebsite: 'StopWebsite'
-              WebsiteName: 'SalesApp'
+    - task: PowerShell@2
+      displayName: 'Stop IIS Before Deployment'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Stop-Service -Name 'W3SVC' -Force
 
-          - task: IISWebAppDeploymentOnMachineGroup@0
-            displayName: 'Deploy Application to IIS'
-            inputs:
-              WebSiteName: 'SalesApp'
-              Package: '$(Build.ArtifactStagingDirectory)/PublishedApp'
-              RemoveAdditionalFilesFlag: true
-              TakeAppOfflineFlag: true
+    - task: PowerShell@2
+      displayName: 'Deploy Application to IIS'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
+          $destinationPath = "C:\inetpub\wwwroot\SalesApp"
 
-          - task: IISWebAppManagementOnMachineGroup@0
-            displayName: 'Start IIS After Deployment'
-            inputs:
-              IISDeploymentType: 'IISWebsite'
-              ActionIISWebsite: 'StartWebsite'
-              WebsiteName: 'SalesApp'
+          if (Test-Path $destinationPath) {
+            Remove-Item -Recurse -Force $destinationPath
+          }
+
+          New-Item -ItemType Directory -Path $destinationPath -Force
+          Copy-Item -Path "$sourcePath\*" -Destination $destinationPath -Recurse -Force
+
+    - task: PowerShell@2
+      displayName: 'Start IIS After Deployment'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Start-Service -Name 'W3SVC'
