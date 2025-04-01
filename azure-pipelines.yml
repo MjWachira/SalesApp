@@ -2,76 +2,88 @@ trigger:
 - main
 
 pool:
-  name: 'LinuxPool'  # Use the Linux pool for running the pipeline tasks
+  name: "default"
 
-variables:
-  buildConfiguration: 'Release'
-  outputDirectory: '$(Build.ArtifactStagingDirectory)/SalesApp'
-  publishDirectory: '$(Build.ArtifactStagingDirectory)/publish'
+stages:
+- stage: Build
+  displayName: 'Build Stage'
+  jobs:
+  - job: Build
+    displayName: 'Build and Publish .NET 9 Application'
+    steps:
+    - checkout: self
 
-steps:
-# Step 1: Install .NET SDK
-- task: UseDotNet@2
-  inputs:
-    packageType: 'sdk'
-    version: '9.x'
-    installationPath: $(Agent.ToolsDirectory)/dotnet
+    - task: UseDotNet@2
+      displayName: 'Setup .NET 9'
+      inputs:
+        packageType: 'sdk'
+        version: '9.0.x'
+        installationPath: $(Agent.ToolsDirectory)/dotnet
 
-# Step 2: Restore NuGet packages
-- task: Restore@1
-  inputs:
-    restoreSolution: '**/*.sln'
+    - script: |
+        dotnet restore
+        dotnet publish -c Release -o $(Build.ArtifactStagingDirectory)/PublishedApp
+      displayName: 'Restore and Build'
 
-# Step 3: Build the application
-- task: Build@1
-  inputs:
-    solution: '**/*.sln'
-    buildConfiguration: $(buildConfiguration)
+    - task: PublishBuildArtifacts@1
+      displayName: 'Upload Build Artifact'
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)/PublishedApp'
+        artifactName: 'SalesApp'
 
-# Step 4: Publish the application
-- task: Publish@1
-  inputs:
-    publishWebProjects: true
-    publishDirectory: $(publishDirectory)
-    arguments: '--configuration $(buildConfiguration) --output $(publishDirectory)'
+- stage: Deploy
+  displayName: 'Deploy Stage'
+  dependsOn: Build
+  jobs:
+  - job: DeployToIIS
+    displayName: 'Deploy to IIS using Default Pool'
+    pool:
+      name: "default" 
+    steps:
+    - task: DownloadBuildArtifacts@0
+      displayName: 'Download Artifact'
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'SalesApp'
+        downloadPath: '$(Build.ArtifactStagingDirectory)/PublishedApp'
 
-# Step 5: Copy published files to the build artifact staging directory
-- task: CopyFiles@2
-  inputs:
-    SourceFolder: $(publishDirectory)
-    Contents: '**'
-    TargetFolder: $(Build.ArtifactStagingDirectory)/SalesApp
+    - task: PowerShell@2
+      displayName: 'Stop IIS Before Deployment'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Stop-Service -Name 'W3SVC' -Force
 
-# Step 6: Publish build artifacts to be used in the release pipeline
-- task: PublishBuildArtifacts@1
-  inputs:
-    ArtifactName: 'SalesApp'
-    publishLocation: 'Container'
+    - task: PowerShell@2
+      displayName: 'Deploy Application to IIS'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $sourcePath = "$(Build.ArtifactStagingDirectory)/PublishedApp"
+          $destinationRootPath = "C:\inetpub\wwwroot"
+          $destinationPath = "C:\inetpub\wwwroot\SalesApp"
 
-# Step 7: Deploy to IIS on the Windows VM using PowerShell (via Windows agent)
-- task: AzureFileCopy@4
-  inputs:
-    SourcePath: $(Build.ArtifactStagingDirectory)/SalesApp
-    azureSubscription: 'john wachira free'  # Azure subscription name
-    Destination: 'IIS-VM'  # The name of your Windows IIS VM
+          # Ensure the destination folder (SalesApp) exists
+          if (Test-Path $destinationPath) {
+            Remove-Item -Recurse -Force $destinationPath
+          }
 
-# Step 8: Use PowerShell to copy files to the IIS server and restart IIS
-- task: PowerShell@2
-  inputs:
-    targetType: 'inline'
-    script: |
-      $ErrorActionPreference = "Stop"
-      
-      # Define VM details
-      $VMName = "IIS-VN"  # Windows IIS VM Name
-      $VMResourceGroup = "IIS-RG"  # Resource Group name for the VM
-      $WebsitePath = "C:\inetpub\wwwroot\SalesApp"  # Path where the app will be copied on the IIS server
+          New-Item -ItemType Directory -Path $destinationPath -Force
 
-      # Connect to the VM via WinRM or use Azure CLI to copy files to the Windows VM
-      # Assuming you have a service connection and SSH/WinRM is enabled on the VM
-      Copy-Item -Path "$(Build.ArtifactStagingDirectory)\SalesApp\*" -Destination $WebsitePath -Recurse -Force
+          Copy-Item -Path "$sourcePath\*" -Destination $destinationRootPath -Recurse -Force
 
-      # Restart IIS to pick up the new application
-      Restart-Service -Name 'W3SVC'  # Restart IIS service to apply changes
-  displayName: 'Deploy to IIS Windows VM'
-  azureSubscription: 'john wachira free'  # Azure service connection name for authentication
+          $acl = Get-Acl $destinationPath
+          $rule = New-Object System.Security.AccessControl.FileSystemAccessRule("IIS_IUSRS", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+          $acl.SetAccessRule($rule)
+
+          Set-Acl -Path $destinationPath -AclObject $acl
+
+          Write-Host "Permissions successfully applied to $destinationPath"
+
+    - task: PowerShell@2
+      displayName: 'Start IIS After Deployment'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Start-Service -Name 'W3SVC'
