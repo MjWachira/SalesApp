@@ -1,8 +1,8 @@
 trigger:
-- main  # Trigger the pipeline on commits to the 'main' branch
+- main
 
 pool:
-  name: 'Default'  # This is your default self-hosted agent pool name
+  name: 'Default'  # Your self-hosted agent pool
 
 variables:
   buildConfiguration: 'Release'
@@ -10,59 +10,59 @@ variables:
   publishDirectory: '$(Build.ArtifactStagingDirectory)/publish'
 
 steps:
+# Step 1: Install .NET SDK (this ensures the agent has the correct SDK installed)
 - task: UseDotNet@2
   inputs:
     packageType: 'sdk'
-    version: '9.x'  # .NET 9 SDK
+    version: '9.x'
     installationPath: $(Agent.ToolsDirectory)/dotnet
 
-# Use DotNetCoreCLI tasks instead of Restore, Build, and Publish tasks
-- task: DotNetCoreCLI@2
+# Step 2: Restore dependencies using `dotnet restore` in a PowerShell or Bash script
+- task: PowerShell@2
   inputs:
-    command: 'restore'
-    projects: '**/*.sln'  # Restore all solutions in the repo
+    targetType: 'inline'
+    script: |
+      Write-Host "Restoring dependencies"
+      dotnet restore $(Build.SourcesDirectory)/SalesApp.sln  # Adjust path to your solution file
 
-- task: DotNetCoreCLI@2
+# Step 3: Build the project using `dotnet build`
+- task: PowerShell@2
   inputs:
-    command: 'build'
-    projects: '**/*.sln'  # Build all solutions in the repo
-    buildConfiguration: $(buildConfiguration)
+    targetType: 'inline'
+    script: |
+      Write-Host "Building the project"
+      dotnet build $(Build.SourcesDirectory)/SalesApp.sln --configuration $(buildConfiguration) --no-restore
 
-- task: DotNetCoreCLI@2
+# Step 4: Publish the application using `dotnet publish`
+- task: PowerShell@2
   inputs:
-    command: 'publish'
-    projects: '**/*.sln'  # Publish all solutions in the repo
-    publishWebProjects: true
-    publishDirectory: $(publishDirectory)
-    arguments: '--configuration $(buildConfiguration) --output $(publishDirectory)'
+    targetType: 'inline'
+    script: |
+      Write-Host "Publishing the project"
+      dotnet publish $(Build.SourcesDirectory)/SalesApp.sln --configuration $(buildConfiguration) --output $(publishDirectory) --no-build
 
+# Step 5: Copy files to artifact staging directory
 - task: CopyFiles@2
   inputs:
     SourceFolder: $(publishDirectory)
     Contents: '**'
     TargetFolder: $(Build.ArtifactStagingDirectory)/SalesApp
 
+# Step 6: Publish build artifacts to the pipeline container
 - task: PublishBuildArtifacts@1
   inputs:
     ArtifactName: 'SalesApp'
     publishLocation: 'Container'
 
-# Deployment to IIS on Self-hosted Agent VM
-- task: AzureCLI@2
+# Step 7: Deploy the app to the IIS VM using PowerShell
+- task: PowerShell@2
   inputs:
-    scriptType: 'ps'
-    scriptLocation: 'inlineScript'
-    inlineScript: |
-      $ErrorActionPreference = "Stop"
-      
-      # Set paths
+    targetType: 'inline'
+    script: |
+      Write-Host "Deploying to IIS"
       $sourcePath = "$(Build.ArtifactStagingDirectory)/SalesApp"
       $destinationPath = "C:\inetpub\wwwroot\SalesApp"  # IIS root folder
-      
       # Copy files to IIS directory
       Copy-Item -Path $sourcePath\* -Destination $destinationPath -Recurse -Force
-      
       # Restart IIS to apply changes
       iisreset
-
-    displayName: 'Deploy to IIS Server on Self-Hosted Agent VM'
