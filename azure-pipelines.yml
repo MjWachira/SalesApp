@@ -62,6 +62,11 @@ steps:
       Write-Host "Deploying to IIS"
       $sourcePath = "$(Build.ArtifactStagingDirectory)/SalesApp"
       $destinationPath = "C:\inetpub\wwwroot\SalesApp"  # IIS root folder
+
+      # Grant write permissions to the IIS folder for the current user
+      icacls $destinationPath /grant "NT AUTHORITY\NETWORK SERVICE:(OI)(CI)F" /T
+      icacls $destinationPath /grant "BUILTIN\Users:(OI)(CI)F" /T
+      
       # Copy files to IIS directory
       Copy-Item -Path $sourcePath\* -Destination $destinationPath -Recurse -Force
       # Restart IIS to apply changes
