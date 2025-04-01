@@ -62,12 +62,28 @@ steps:
       Write-Host "Deploying to IIS"
       $sourcePath = "$(Build.ArtifactStagingDirectory)/SalesApp"
       $destinationPath = "C:\inetpub\wwwroot\SalesApp"  # IIS root folder
+      $parentPath = "C:\inetpub\wwwroot"  # Parent folder to set permissions
 
-      # Grant write permissions to the IIS folder for the current user
-      icacls $destinationPath /grant "NT AUTHORITY\NETWORK SERVICE:(OI)(CI)F" /T
-      icacls $destinationPath /grant "BUILTIN\Users:(OI)(CI)F" /T
-      
+      # Grant permissions to the parent folder (to ensure that all future subfolders inherit permissions)
+      Write-Host "Granting permissions to $parentPath"
+      icacls $parentPath /grant "NT AUTHORITY\NETWORK SERVICE:(OI)(CI)F" /T
+      icacls $parentPath /grant "BUILTIN\Users:(OI)(CI)F" /T
+
+      # Check if the folder exists, if not, create it
+      if (-not (Test-Path $destinationPath)) {
+        Write-Host "Creating folder: $destinationPath"
+        New-Item -ItemType Directory -Force -Path $destinationPath
+      } else {
+        Write-Host "Folder already exists. Clearing old files."
+        # Remove any existing files in the folder
+        Remove-Item "$destinationPath\*" -Recurse -Force
+      }
+
       # Copy files to IIS directory
+      Write-Host "Copying files to $destinationPath"
       Copy-Item -Path $sourcePath\* -Destination $destinationPath -Recurse -Force
+
       # Restart IIS to apply changes
+      Write-Host "Restarting IIS"
       iisreset
+
