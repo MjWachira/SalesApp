@@ -1,30 +1,47 @@
 using Microsoft.AspNetCore.Mvc;
-using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using SalesApp.DTO;
+using SalesApp.Models;
+using SalesApp.Services;
 
 [ApiController]
 [Route("api/customers")]
 public class CustomersController : ControllerBase
 {
-    private readonly IWebHostEnvironment _env;
+    private readonly ICustomerService _customerService;
 
-    public CustomersController(IWebHostEnvironment env)
+    public CustomersController(ICustomerService customerService)
     {
-        _env = env;
+        _customerService = customerService;
     }
 
-    [HttpGet]
-    public IActionResult GetCustomers()
+    [HttpGet("all")]
+    public async Task<IActionResult> GetCustomers()
     {
-        var filePath = Path.Combine(_env.ContentRootPath, "customers.json");
+        var customerDtos = await _customerService.GetCustomersAsync();
+        return Ok(customerDtos);
+    }
 
-        if (!System.IO.File.Exists(filePath))
+    [HttpPost]
+    public async Task<IActionResult> AddCustomer([FromBody] CustomerDto customerDto)
+    {
+        // Use the service to add the customer
+        var customer = await _customerService.AddCustomerAsync(customerDto.Name, customerDto.Email);
+
+        return CreatedAtAction(nameof(GetCustomers), new { id = customer.Id }, customer);
+    }
+
+    [HttpPost("{customerId}/{productId}")]
+    public async Task<IActionResult> AddProductToCustomer(int customerId, int productId)
+    {
+        try
         {
-            return NotFound("Customers data file not found.");
+            await _customerService.AddProductToCustomerAsync(customerId, productId);
+            return Ok(new { message = "Product added to customer" });
         }
-
-        var jsonData = System.IO.File.ReadAllText(filePath);
-        var customers = JsonSerializer.Deserialize<object>(jsonData);
-
-        return Ok(customers);
+        catch (ArgumentException ex)
+        {
+            return NotFound(ex.Message);
+        }
     }
 }
