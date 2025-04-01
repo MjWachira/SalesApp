@@ -2,7 +2,7 @@ trigger:
 - main
 
 pool:
-  name: "default"  # Use the default agent pool
+  name: "default"
 
 stages:
 - stage: Build
@@ -38,7 +38,7 @@ stages:
   - job: DeployToIIS
     displayName: 'Deploy to IIS using Default Pool'
     pool:
-      name: "default"  # Ensure the deployment also runs on the default pool
+      name: "default" 
     steps:
     - task: DownloadBuildArtifacts@0
       displayName: 'Download Artifact'
@@ -69,18 +69,14 @@ stages:
             Remove-Item -Recurse -Force $destinationPath
           }
 
-          # Create the SalesApp directory inside wwwroot
           New-Item -ItemType Directory -Path $destinationPath -Force
 
-          # Copy the files to the root directory, not to SalesApp directly
           Copy-Item -Path "$sourcePath\*" -Destination $destinationRootPath -Recurse -Force
 
-          # Set Full Control permissions for IIS_IUSRS on the SalesApp folder
           $acl = Get-Acl $destinationPath
           $rule = New-Object System.Security.AccessControl.FileSystemAccessRule("IIS_IUSRS", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
           $acl.SetAccessRule($rule)
 
-          # Apply the updated ACL to the SalesApp folder
           Set-Acl -Path $destinationPath -AclObject $acl
 
           Write-Host "Permissions successfully applied to $destinationPath"
