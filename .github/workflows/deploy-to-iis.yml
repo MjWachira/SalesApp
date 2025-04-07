@@ -68,3 +68,4 @@ jobs:
 
       - name: Restart IIS
         run: ssh azure-vm "iisreset"
+        
